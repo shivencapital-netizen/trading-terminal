@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+
+# Node
+node_modules/
+
+# Environment variables
+.env
+
+# Database files
+*.db
+
+# Logs
+*.log
+
+# Backup folders
+Backups/
+
+# Data dumps
+data/investing/*
+data/yfinance/*
+data/tmp/*
+
+# OS files
+.DS_Store
+Thumbs.db

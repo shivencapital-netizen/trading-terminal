@@ -1,0 +1,7 @@
+YEARS=3
+TRUNCATE=NO
+
+AAPL|https://www.investing.com/equities/apple-computer-inc-historical-data
+ORCL|https://www.investing.com/equities/oracle-corp-historical-data
+AMD|https://www.investing.com/equities/adv-micro-device-historical-data
+MSFT|https://www.investing.com/equities/microsoft-corp-historical-data

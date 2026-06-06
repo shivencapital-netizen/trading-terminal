@@ -1,0 +1,7 @@
+{
+    "python.defaultInterpreterPath": "D:/trading_terminal/venv/Scripts/python.exe",
+    "python.analysis.extraPaths": [
+        "D:/trading_terminal/backend",
+        "D:/trading_terminal/venv/Lib/site-packages"
+    ]
+}
