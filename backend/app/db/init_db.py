@@ -5,7 +5,6 @@ from .base_class import Base
 from app.models.instrument import Instrument
 from app.models.ticks import Tick
 from app.models.latest_tick import LatestTick
-from app.models import LatestTick1
 
 def init_db():
     Base.metadata.create_all(bind=engine)
