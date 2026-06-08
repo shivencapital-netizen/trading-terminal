@@ -13,6 +13,7 @@ from app.api.v1 import (
     routes_charts,
     routes_instruments,
 )
+from app.api.v1 import routes_quotes
 
 from app.db.init_db import init_db
 
@@ -21,6 +22,7 @@ import threading
 # ⭐ FIXED IMPORTS — match your actual folder
 from app.services.realtime_engine import start_realtime_ingestion
 from app.services.ingestion_engine import candle_builder_loop
+from app.services.delayed_data import start_delayed_quote_polling
 
 
 app = FastAPI(
@@ -47,6 +49,7 @@ app.include_router(routes_greeks.router, prefix="/api/v1/greeks", tags=["Greeks"
 app.include_router(routes_admin.router, prefix="/api/v1/admin", tags=["Admin"])
 app.include_router(routes_charts.router, prefix="/api/v1/charts", tags=["Charts"])
 app.include_router(routes_instruments.router, prefix="/api/v1/instruments", tags=["Instruments"])
+app.include_router(routes_quotes.router, prefix="/api/v1/quotes", tags=["Delayed Quotes"])
 
 
 @app.on_event("startup")
@@ -63,6 +66,10 @@ async def startup_event():
     # Start 1-minute candle builder
     threading.Thread(target=candle_builder_loop, daemon=True).start()
     print("🕒 Candle builder loop started.")
+
+    # Start free delayed-data polling (15-minute delayed IEX bars)
+    threading.Thread(target=start_delayed_quote_polling, daemon=True).start()
+    print("⏱️  Delayed quote polling thread started.")
 
 
 @app.get("/")

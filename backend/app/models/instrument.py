@@ -10,5 +10,6 @@ class Instrument(Base):
     name = Column(String, nullable=True)
     exchange = Column(String, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    last_loaded_time = Column(TIMESTAMP(timezone=True), nullable=True)
 
 
