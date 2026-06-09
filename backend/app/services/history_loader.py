@@ -1,6 +1,7 @@
 # app/services/history_loader.py
 
 from datetime import datetime, timedelta, date
+from zoneinfo import ZoneInfo
 from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -27,10 +28,21 @@ def load_history_1m(
     end: Optional[datetime] = None,
 ):
     if end is None:
-        end = datetime.combine(date.today(), datetime.min.time())
+        end = datetime.now(ZoneInfo("America/New_York"))
 
     if start is None:
         start = end - timedelta(days=365 * years)
+
+    # Normalize both datetimes to America/New_York timezone for internal comparison.
+    if getattr(start, "tzinfo", None) is None:
+        start = start.replace(tzinfo=ZoneInfo("America/New_York"))
+    else:
+        start = start.astimezone(ZoneInfo("America/New_York"))
+
+    if getattr(end, "tzinfo", None) is None:
+        end = end.replace(tzinfo=ZoneInfo("America/New_York"))
+    else:
+        end = end.astimezone(ZoneInfo("America/New_York"))
 
     if start >= end:
         raise ValueError("start must be before end")
@@ -39,11 +51,27 @@ def load_history_1m(
         f"📥 Loading 1m candles for {symbol} from {start.isoformat()} to {end.isoformat()} using Alpaca SDK..."
     )
 
+    # Ensure datetimes passed to the Alpaca SDK are timezone-aware UTC.
+    # Internally we store and compare times in America/New_York timezone,
+    # so convert `start`/`end` to UTC for the API call.
+    if getattr(start, "tzinfo", None) is None:
+        start_ny = start.replace(tzinfo=ZoneInfo("America/New_York"))
+    else:
+        start_ny = start.astimezone(ZoneInfo("America/New_York"))
+
+    if getattr(end, "tzinfo", None) is None:
+        end_ny = end.replace(tzinfo=ZoneInfo("America/New_York"))
+    else:
+        end_ny = end.astimezone(ZoneInfo("America/New_York"))
+
+    req_start = start_ny.astimezone(ZoneInfo("UTC"))
+    req_end = end_ny.astimezone(ZoneInfo("UTC"))
+
     request_params = StockBarsRequest(
         symbol_or_symbols=[symbol],
         timeframe=TimeFrame.Minute,
-        start=start,
-        end=end,
+        start=req_start,
+        end=req_end,
         feed="iex"  # REQUIRED for free tier
     )
 
@@ -63,8 +91,11 @@ def load_history_1m(
         # Convert pandas Timestamp → Python datetime
         ts = ts.to_pydatetime()
 
-        # Strip timezone (Postgres requires naive timestamps)
-        ts = ts.replace(tzinfo=None)
+        # Convert timestamp to America/New_York timezone and keep tzinfo
+        if getattr(ts, "tzinfo", None) is None:
+            ts = ts.replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("America/New_York"))
+        else:
+            ts = ts.astimezone(ZoneInfo("America/New_York"))
 
         candle = Candle1m(
             symbol=symbol,
@@ -103,6 +134,14 @@ def get_latest_candle_time(db: Session, symbol: str) -> Optional[datetime]:
         .filter(Candle1m.symbol == symbol)
         .scalar()
     )
+    if latest_time is None:
+        return None
+
+    # Ensure returned time is in America/New_York timezone
+    if getattr(latest_time, "tzinfo", None) is None:
+        latest_time = latest_time.replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("America/New_York"))
+    else:
+        latest_time = latest_time.astimezone(ZoneInfo("America/New_York"))
     return latest_time
 
 
@@ -149,7 +188,7 @@ def update_latest_candle_snapshot(db: Session, symbol: str):
         snapshot.low = latest.low
         snapshot.close = latest.close
         snapshot.volume = latest.volume
-        snapshot.updated_at = datetime.utcnow()
+        snapshot.updated_at = datetime.now(ZoneInfo("America/New_York"))
     else:
         snapshot = LatestCandle1m(
             symbol=symbol,
@@ -159,7 +198,7 @@ def update_latest_candle_snapshot(db: Session, symbol: str):
             low=latest.low,
             close=latest.close,
             volume=latest.volume,
-            updated_at=datetime.utcnow(),
+            updated_at=datetime.now(ZoneInfo("America/New_York")),
         )
         db.add(snapshot)
 
@@ -175,20 +214,40 @@ def load_history_1m_delta(
 ):
     symbol = symbol.upper()
 
+    # Default `end` to current time in US market timezone (America/New_York).
+    # Keep `end` timezone-aware in America/New_York so comparisons with
+    # DB-returned times (converted to America/New_York) are consistent.
     if end is None:
-        end = datetime.utcnow() - timedelta(minutes=delay_minutes)
+        now_us = datetime.now(ZoneInfo("America/New_York"))
+        end = now_us - timedelta(minutes=delay_minutes)
 
     latest_time = get_latest_candle_time(db, symbol)
     if latest_time:
         start = latest_time + timedelta(minutes=1)
+    else:
+        start = end - timedelta(days=365 * years)
+
+    # Ensure `start` and `end` are in America/New_York timezone (tz-aware)
+    if getattr(start, "tzinfo", None) is None:
+        start = start.replace(tzinfo=ZoneInfo("America/New_York"))
+    else:
+        start = start.astimezone(ZoneInfo("America/New_York"))
+
+    if getattr(end, "tzinfo", None) is None:
+        end = end.replace(tzinfo=ZoneInfo("America/New_York"))
+    else:
+        end = end.astimezone(ZoneInfo("America/New_York"))
+
+    if latest_time:
         print(
             f"🔁 Loading delta 1m candles for {symbol} from {start.isoformat()} to {end.isoformat()}"
         )
     else:
-        start = end - timedelta(days=365 * years)
         print(
             f"📥 No existing candles for {symbol}; loading last {years} year(s) from {start.isoformat()} to {end.isoformat()}"
         )
+
+    # At this point `start` and `end` are timezone-aware in America/New_York.
 
     if start >= end:
         print(f"✅ No new data to load for {symbol}, latest available candle is up to date.")

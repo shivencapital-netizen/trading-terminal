@@ -7,7 +7,7 @@ class Candle1m(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String(20), index=True, nullable=False)
-    start_time = Column(DateTime, nullable=False, index=True)
+    start_time = Column(DateTime(timezone=True), nullable=False, index=True)
     open = Column(Float, nullable=False)
     high = Column(Float, nullable=False)
     low = Column(Float, nullable=False)

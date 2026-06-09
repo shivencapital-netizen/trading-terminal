@@ -7,4 +7,4 @@ class LatestTick(Base):
     symbol = Column(String, primary_key=True, index=True)
     price = Column(Float, nullable=False)
     volume = Column(Integer, nullable=True)
-    timestamp = Column(DateTime, nullable=False)
+    timestamp = Column(DateTime(timezone=True), nullable=False)
