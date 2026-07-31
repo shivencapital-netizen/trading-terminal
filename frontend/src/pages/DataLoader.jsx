@@ -29,13 +29,21 @@ export default function DataLoader() {
       let url = "http://127.0.0.1:8000/api/v1/admin/load-history-1m-delta";
       if (incrementalScope === "one") {
         url += `?symbol=${incrementalSymbol.toUpperCase()}`;
+      } else if (incrementalScope === "never") {
+        url += "?mode=never";
       }
 
       const res = await fetch(url, { method: "POST" });
       const data = await res.json();
 
       if (res.ok) {
-        setMessage(`✅ Incremental loaded ${data.inserted} candles for ${data.symbol}`);
+        if (incrementalScope === "never") {
+          setMessage(
+            `✅ Loaded ${data.inserted} candles for ${data.symbol_count || 0} never-loaded symbols`
+          );
+        } else {
+          setMessage(`✅ Incremental loaded ${data.inserted} candles for ${data.symbol}`);
+        }
         setIncrementalSymbol("");
         fetchSymbolStatus();
       } else {
@@ -101,6 +109,16 @@ export default function DataLoader() {
       console.error("Status fetch error:", err);
     }
   };
+
+  const neverLoadedCount = symbolStatus.reduce((count, item) => {
+    const lastLoaded = item.last_loaded_time;
+    const isNeverLoaded =
+      lastLoaded === null ||
+      lastLoaded === undefined ||
+      lastLoaded === "" ||
+      lastLoaded === "Never";
+    return count + (isNeverLoaded ? 1 : 0);
+  }, 0);
 
   const deleteData = async (e) => {
     e.preventDefault();
@@ -215,7 +233,35 @@ export default function DataLoader() {
       {/* Load Data Tab */}
       {activeTab === "load" && (
         <div style={{ padding: "20px", background: "#f9f9f9", borderRadius: "4px" }}>
-          <h2>Load 1-Minute Historical Data</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h2>Load 1-Minute Historical Data</h2>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                background: '#f0f9ff',
+                border: '1px solid #b6e0fe',
+                borderRadius: '999px',
+                color: '#055160',
+                fontWeight: 'bold',
+              }}
+            >
+              <span>Never loaded:</span>
+              <span
+                style={{
+                  minWidth: '32px',
+                  textAlign: 'center',
+                  background: '#e0f2fe',
+                  borderRadius: '999px',
+                  padding: '4px 10px',
+                }}
+              >
+                {neverLoadedCount}
+              </span>
+            </div>
+          </div>
           <form onSubmit={runIncremental} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
             <div>
               <label style={{ display: "block", marginBottom: "10px", fontWeight: "bold" }}>
@@ -241,6 +287,16 @@ export default function DataLoader() {
                     style={{ marginRight: "5px" }}
                   />
                   All symbols incremental
+                </label>
+                <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    value="never"
+                    checked={incrementalScope === "never"}
+                    onChange={(e) => setIncrementalScope(e.target.value)}
+                    style={{ marginRight: "5px" }}
+                  />
+                  Never-loaded symbols only
                 </label>
               </div>
             </div>
@@ -539,21 +595,49 @@ export default function DataLoader() {
       {activeTab === "status" && (
         <div style={{ padding: "20px", background: "#f9f9f9", borderRadius: "4px" }}>
           <h2>Symbol Load Status</h2>
-          <button
-            onClick={fetchSymbolStatus}
-            style={{
-              marginBottom: "15px",
-              padding: "8px 16px",
-              background: "#17a2b8",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-              fontWeight: "bold",
-            }}
-          >
-            🔄 Refresh Status
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <button
+              onClick={fetchSymbolStatus}
+              style={{
+                marginBottom: "15px",
+                padding: "8px 16px",
+                background: "#17a2b8",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              🔄 Refresh Status
+            </button>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                background: '#fff7ed',
+                border: '1px solid #fcd34d',
+                borderRadius: '999px',
+                color: '#92400e',
+                fontWeight: 'bold',
+              }}
+            >
+              <span>Never loaded:</span>
+              <span
+                style={{
+                  minWidth: '32px',
+                  textAlign: 'center',
+                  background: '#fde68a',
+                  borderRadius: '999px',
+                  padding: '4px 10px',
+                }}
+              >
+                {neverLoadedCount}
+              </span>
+            </div>
+          </div>
 
           {symbolStatus.length === 0 ? (
             <p style={{ color: "#666" }}>No symbols loaded yet.</p>

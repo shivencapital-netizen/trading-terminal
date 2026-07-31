@@ -13,6 +13,7 @@ from alpaca.data.timeframe import TimeFrame
 from app.models.candles_1m import Candle1m
 from app.models.instrument import Instrument
 from app.models.latest_candle_1m import LatestCandle1m
+from app.models.symbol_load_summary import SymbolLoadSummary
 
 ALPACA_API_KEY = "PKSQADWO6NSFCZ3XOMK4RG54YA"
 ALPACA_SECRET_KEY = "5fJMeiCcTt5XJ2wcNzZAnwTLTn8HbYKLy1yjXEJWWKRo"
@@ -124,7 +125,34 @@ def load_history_1m(
     db.commit()
     print(f"✅ Inserted {inserted} candles for {symbol}")
     update_instrument_last_loaded_time(db, symbol)
+    refresh_symbol_load_summary(db, symbol)
     return inserted
+
+
+def refresh_symbol_load_summary(db: Session, symbol: str):
+    symbol = symbol.upper()
+    candle_count = db.query(func.count(Candle1m.id)).filter(Candle1m.symbol == symbol).scalar() or 0
+    last_loaded_time = db.query(func.max(Candle1m.start_time)).filter(Candle1m.symbol == symbol).scalar()
+    summary = db.query(SymbolLoadSummary).filter(SymbolLoadSummary.symbol == symbol).one_or_none()
+
+    if summary:
+        summary.candle_count = candle_count
+        summary.last_loaded_time = last_loaded_time
+        summary.updated_at = datetime.now(ZoneInfo("America/New_York"))
+    else:
+        summary = SymbolLoadSummary(
+            symbol=symbol,
+            candle_count=candle_count,
+            last_loaded_time=last_loaded_time,
+            updated_at=datetime.now(ZoneInfo("America/New_York")),
+        )
+        db.add(summary)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
 def get_latest_candle_time(db: Session, symbol: str) -> Optional[datetime]:
@@ -256,4 +284,5 @@ def load_history_1m_delta(
     inserted = load_history_1m(db, symbol, start=start, end=end)
     if inserted:
         update_latest_candle_snapshot(db, symbol)
+        refresh_symbol_load_summary(db, symbol)
     return inserted

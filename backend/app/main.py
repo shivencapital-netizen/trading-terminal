@@ -23,6 +23,7 @@ import threading
 from app.services.realtime_engine import start_realtime_ingestion
 from app.services.ingestion_engine import candle_builder_loop
 from app.services.delayed_data import start_delayed_quote_polling
+from app.services.summary_refresh import start_symbol_load_summary_refresher
 
 
 app = FastAPI(
@@ -70,6 +71,10 @@ async def startup_event():
     # Start free delayed-data polling (15-minute delayed IEX bars)
     threading.Thread(target=start_delayed_quote_polling, daemon=True).start()
     print("⏱️  Delayed quote polling thread started.")
+
+    # Start periodic symbol load summary refresher
+    threading.Thread(target=start_symbol_load_summary_refresher, daemon=True).start()
+    print("⏱️  Symbol load summary refresher thread started.")
 
 
 @app.get("/")

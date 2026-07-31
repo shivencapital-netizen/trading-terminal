@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.services.history_loader import load_history_1m, load_history_1m_delta
 from app.models.instrument import Instrument
 from app.models.candles_1m import Candle1m
+from app.models.symbol_load_summary import SymbolLoadSummary
 
 router = APIRouter()
 
@@ -62,10 +63,21 @@ def load_history_1m_api(
 # ---------------------------------------------------------
 # Load Incremental 1-Minute Candle Delta
 # ---------------------------------------------------------
+def get_never_loaded_symbols(db: Session):
+    rows = (
+        db.query(Instrument.symbol)
+        .filter(Instrument.last_loaded_time.is_(None))
+        .order_by(Instrument.symbol)
+        .all()
+    )
+    return [row[0] for row in rows if row and row[0]]
+
+
 @router.post("/load-history-1m-delta")
 def load_history_1m_delta_api(
     symbol: Optional[str] = None,
     years: int = 1,
+    mode: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -77,6 +89,18 @@ def load_history_1m_delta_api(
         return {
             "symbol": symbol.upper(),
             "inserted": inserted
+        }
+
+    if mode == "never":
+        symbols = get_never_loaded_symbols(db)
+        total_inserted = 0
+        for symbol_name in symbols:
+            total_inserted += load_history_1m_delta(db, symbol_name, years)
+
+        return {
+            "symbol": "NEVER",
+            "symbol_count": len(symbols),
+            "inserted": total_inserted
         }
 
     symbols = get_all_symbols(db)
@@ -97,28 +121,32 @@ def load_history_1m_delta_api(
 @router.get("/symbol-status")
 def get_symbol_status(db: Session = Depends(get_db)):
     """
-    Retrieve the load status for all instruments:
+    Retrieve the load status for all instruments using the fast summary table:
     - Symbol name
-    - Candle count in candles_1m
-    - Last loaded time from instruments table
+    - Candle count from symbol_load_summary
+    - Last loaded time from summary or instruments table
     """
-    instruments = db.query(Instrument).all()
-    
-    status = []
-    for instr in instruments:
-        candle_count = (
-            db.query(func.count(Candle1m.id))
-            .filter(Candle1m.symbol == instr.symbol.upper())
-            .scalar() or 0
+    rows = (
+        db.query(
+            Instrument.symbol,
+            Instrument.last_loaded_time,
+            SymbolLoadSummary.candle_count,
+            SymbolLoadSummary.last_loaded_time.label("summary_last_loaded_time"),
         )
-        
-        last_loaded_time = getattr(instr, "last_loaded_time", None)
+        .outerjoin(SymbolLoadSummary, SymbolLoadSummary.symbol == Instrument.symbol)
+        .order_by(Instrument.symbol)
+        .all()
+    )
+
+    status = []
+    for symbol, instrument_last_loaded_time, candle_count, summary_last_loaded_time in rows:
+        last_loaded_time = summary_last_loaded_time or instrument_last_loaded_time
         status.append({
-            "symbol": instr.symbol,
-            "candle_count": candle_count,
+            "symbol": symbol,
+            "candle_count": candle_count or 0,
             "last_loaded_time": last_loaded_time.isoformat() if last_loaded_time else None,
         })
-    
+
     return status
 
 
@@ -181,12 +209,19 @@ def delete_history_1m_api(
             db.add(instr)
 
     if mode == "all":
-        # update all instruments
+        # update all instruments and summary rows
         instruments = db.query(Instrument).all()
         for instr in instruments:
             last = db.query(func.max(Candle1m.start_time)).filter(Candle1m.symbol == instr.symbol).scalar()
             instr.last_loaded_time = last
             db.add(instr)
+            summary = db.query(SymbolLoadSummary).filter(SymbolLoadSummary.symbol == instr.symbol).one_or_none()
+            if summary:
+                summary.candle_count = db.query(func.count(Candle1m.id)).filter(Candle1m.symbol == instr.symbol).scalar() or 0
+                summary.last_loaded_time = last
+                summary.updated_at = func.now()
+            else:
+                db.add(SymbolLoadSummary(symbol=instr.symbol, candle_count=0, last_loaded_time=last))
     elif mode == "current-year":
         # current-year affects all symbols as well
         instruments = db.query(Instrument).all()
@@ -194,9 +229,25 @@ def delete_history_1m_api(
             last = db.query(func.max(Candle1m.start_time)).filter(Candle1m.symbol == instr.symbol).scalar()
             instr.last_loaded_time = last
             db.add(instr)
+            summary = db.query(SymbolLoadSummary).filter(SymbolLoadSummary.symbol == instr.symbol).one_or_none()
+            if summary:
+                summary.candle_count = db.query(func.count(Candle1m.id)).filter(Candle1m.symbol == instr.symbol).scalar() or 0
+                summary.last_loaded_time = last
+                summary.updated_at = func.now()
+            else:
+                db.add(SymbolLoadSummary(symbol=instr.symbol, candle_count=0, last_loaded_time=last))
     elif mode in ("all-years", "symbol-year"):
         # affects a single symbol
         _update_for_symbol(symbol)
+        summary = db.query(SymbolLoadSummary).filter(SymbolLoadSummary.symbol == symbol.upper()).one_or_none()
+        candle_count = db.query(func.count(Candle1m.id)).filter(Candle1m.symbol == symbol.upper()).scalar() or 0
+        last = db.query(func.max(Candle1m.start_time)).filter(Candle1m.symbol == symbol.upper()).scalar()
+        if summary:
+            summary.candle_count = candle_count
+            summary.last_loaded_time = last
+            summary.updated_at = func.now()
+        else:
+            db.add(SymbolLoadSummary(symbol=symbol.upper(), candle_count=candle_count, last_loaded_time=last))
 
     db.commit()
 

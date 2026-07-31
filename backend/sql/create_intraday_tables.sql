@@ -24,6 +24,15 @@ ADD COLUMN IF NOT EXISTS lot_size INT,
 ADD COLUMN IF NOT EXISTS tick_size DOUBLE PRECISION,
 ADD COLUMN IF NOT EXISTS last_loaded_time TIMESTAMP WITH TIME ZONE;
 
+CREATE TABLE IF NOT EXISTS symbol_load_summary (
+    symbol TEXT PRIMARY KEY,
+    candle_count INT NOT NULL DEFAULT 0,
+    last_loaded_time TIMESTAMP WITH TIME ZONE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_symbol_load_summary_updated_at
+    ON symbol_load_summary(updated_at);
 
 CREATE TABLE IF NOT EXISTS screener_results (
     symbol TEXT PRIMARY KEY,

@@ -7,6 +7,7 @@ from app.models.ticks import Tick
 from app.models.latest_tick import LatestTick
 from app.models.candles_1m import Candle1m
 from app.models.latest_candle_1m import LatestCandle1m
+from app.models.symbol_load_summary import SymbolLoadSummary
 
 def init_db():
     Base.metadata.create_all(bind=engine)
