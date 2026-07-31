@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.services.screener_engine import run_screener
+from app.schemas.screener import ScreenerFilters
+from app.services.screener_engine import run_screener, run_history_screener
 
 router = APIRouter()
 
@@ -22,6 +23,18 @@ def run_screener_endpoint(db: Session = Depends(get_db)):
     - intraday candles for today
     """
     results = run_screener(db)
+    return results
+
+
+@router.get("/history")
+def run_history_screener_endpoint(
+    filters: ScreenerFilters = Depends(),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns screener metrics based on historical candles in candles_1m.
+    """
+    results = run_history_screener(db, filters=filters)
     return results
 
 

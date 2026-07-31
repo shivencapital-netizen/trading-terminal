@@ -20,6 +20,15 @@ class ScreenerFilters(BaseModel):
     max_price: Optional[float] = None
     min_volume: Optional[int] = None
 
+    price_above_sma20: Optional[bool] = None
+    price_above_sma50: Optional[bool] = None
+    sma_bullish_crossover: Optional[bool] = None
+    rsi_min: Optional[float] = None
+    rsi_max: Optional[float] = None
+    rsi_bullish_divergence: Optional[bool] = None
+    avg_volume_ratio_min: Optional[float] = None
+    min_score: Optional[float] = None
+
 
 class ScreenerResult(BaseModel):
     """
