@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ScreenerSidebar from "../components/screener/ScreenerSidebar";
 import ScreenerResults from "../components/screener/ScreenerResults";
 import { Sparklines, SparklinesLine } from "react-sparklines";
 
-export default function Screener() {
+export default function Screener({ universeSymbols = null, universeMeta = {}, pageTitle = "Screener" }) {
   const [criteria, setCriteria] = useState({});
   const [results, setResults] = useState([]);
   const [mode, setMode] = useState("live");
@@ -11,6 +11,8 @@ export default function Screener() {
   const [chartData, setChartData] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState(null);
+  const [sortField, setSortField] = useState("symbol");
+  const [sortDirection, setSortDirection] = useState("asc");
 
   const buildQueryParams = (filters) => {
     const params = new URLSearchParams();
@@ -36,11 +38,32 @@ export default function Screener() {
     return params.toString();
   };
 
+  const filterUniverse = (data) => {
+    if (!universeSymbols || !Array.isArray(data)) return data;
+    const universeSet = new Set(universeSymbols.map((s) => s.toUpperCase()));
+    return data.filter((row) => universeSet.has(String(row.symbol || "").toUpperCase()));
+  };
+
+  const attachUniverseMeta = (data) => {
+    if (!universeSymbols || !Array.isArray(data)) return data;
+    const rankMap = new Map(universeSymbols.map((symbol, index) => [symbol.toUpperCase(), index + 1]));
+    return data.map((row) => {
+      const sym = String(row.symbol || "").toUpperCase();
+      return {
+        ...row,
+        qqq_rank: rankMap.get(sym) || null,
+        qqq_weight: universeMeta[sym] ?? null,
+      };
+    });
+  };
+
   const runScreener = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/screener/run");
+      const url = "http://127.0.0.1:8000/api/v1/screener/run";
+      const res = await fetch(url);
       const data = await res.json();
-      setResults(Array.isArray(data) ? data : []);
+      const filtered = filterUniverse(Array.isArray(data) ? data : []);
+      setResults(attachUniverseMeta(filtered));
       setSelectedSymbol(null);
       setChartData([]);
       setChartError(null);
@@ -58,7 +81,8 @@ export default function Screener() {
       }`;
       const res = await fetch(url);
       const data = await res.json();
-      setResults(Array.isArray(data) ? data : []);
+      const filtered = filterUniverse(Array.isArray(data) ? data : []);
+      setResults(attachUniverseMeta(filtered));
       setSelectedSymbol(null);
       setChartData([]);
       setChartError(null);
@@ -67,6 +91,16 @@ export default function Screener() {
       setResults([]);
     }
   };
+
+  useEffect(() => {
+    if (universeSymbols) {
+      if (mode === "history") {
+        runHistoryScreener();
+      } else {
+        runScreener();
+      }
+    }
+  }, [universeSymbols, mode]);
 
   const handleSelectSymbol = async (symbol) => {
     setSelectedSymbol(symbol);
@@ -94,6 +128,57 @@ export default function Screener() {
 
   const handleRun = mode === "history" ? runHistoryScreener : runScreener;
 
+  const sortedResults = useMemo(() => {
+    const withDiff = results.map((row) => {
+      const last = Number(row.last_price ?? row.lastPrice ?? 0);
+      const high = Number(row.high ?? 0);
+      return {
+        ...row,
+        diff_percent: last ? ((high - last) / last) * 100 : null,
+      };
+    });
+
+    const getValue = (row, field) => {
+      const value = row[field];
+      if (value === null || value === undefined) return value;
+      if (field === "symbol") return String(value).toUpperCase();
+      if (typeof value === "boolean") return value ? 1 : 0;
+      const num = Number(value);
+      return Number.isNaN(num) ? String(value) : num;
+    };
+
+    const sorted = [...withDiff];
+    sorted.sort((a, b) => {
+      const aValue = getValue(a, sortField);
+      const bValue = getValue(b, sortField);
+
+      if (aValue === null || aValue === undefined) return 1;
+      if (bValue === null || bValue === undefined) return -1;
+      if (typeof aValue === "string" || typeof bValue === "string") {
+        return String(aValue).localeCompare(String(bValue), undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      }
+      return aValue - bValue;
+    });
+
+    if (sortDirection === "desc") {
+      sorted.reverse();
+    }
+
+    return sorted;
+  }, [results, sortField, sortDirection]);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
   const closePrices = chartData.map((c) => c.close);
   const latestCandle = chartData.length > 0 ? chartData[chartData.length - 1] : null;
 
@@ -110,10 +195,14 @@ export default function Screener() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, height: "100%", overflow: "hidden" }}>
         <div style={{ flex: 1, overflow: "hidden", minHeight: 0, height: "100%", maxHeight: "100%" }}>
           <ScreenerResults
-            results={results}
+            results={sortedResults}
             mode={mode}
+            pageTitle={pageTitle}
             selectedSymbol={selectedSymbol}
             onRowClick={handleSelectSymbol}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
           />
         </div>
       </div>

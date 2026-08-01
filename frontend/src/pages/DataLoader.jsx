@@ -659,6 +659,12 @@ export default function DataLoader() {
                     Candle Count
                   </th>
                   <th style={{ padding: "12px", textAlign: "left", fontWeight: "bold" }}>
+                    Start Period
+                  </th>
+                  <th style={{ padding: "12px", textAlign: "left", fontWeight: "bold" }}>
+                    End Period
+                  </th>
+                  <th style={{ padding: "12px", textAlign: "left", fontWeight: "bold" }}>
                     Last Loaded Time
                   </th>
                   <th style={{ padding: "12px", textAlign: "left", fontWeight: "bold" }}>
@@ -671,6 +677,16 @@ export default function DataLoader() {
                   <tr key={idx} style={{ borderBottom: "1px solid #eee" }}>
                     <td style={{ padding: "12px", fontWeight: "bold" }}>{item.symbol}</td>
                     <td style={{ padding: "12px" }}>{item.candle_count}</td>
+                    <td style={{ padding: "12px", fontSize: "0.9em", color: "#666" }}>
+                      {item.start_period
+                        ? new Date(item.start_period).toLocaleString()
+                        : "-"}
+                    </td>
+                    <td style={{ padding: "12px", fontSize: "0.9em", color: "#666" }}>
+                      {item.end_period
+                        ? new Date(item.end_period).toLocaleString()
+                        : "-"}
+                    </td>
                     <td style={{ padding: "12px", fontSize: "0.9em", color: "#666" }}>
                       {item.last_loaded_time
                         ? new Date(item.last_loaded_time).toLocaleString()

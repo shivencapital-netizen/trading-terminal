@@ -125,26 +125,42 @@ def get_symbol_status(db: Session = Depends(get_db)):
     - Symbol name
     - Candle count from symbol_load_summary
     - Last loaded time from summary or instruments table
+    - Start and end candle periods from candles_1m
     """
+    candle_range = (
+        db.query(
+            Candle1m.symbol.label("symbol"),
+            func.min(Candle1m.start_time).label("start_period"),
+            func.max(Candle1m.start_time).label("end_period"),
+        )
+        .group_by(Candle1m.symbol)
+        .subquery()
+    )
+
     rows = (
         db.query(
             Instrument.symbol,
             Instrument.last_loaded_time,
             SymbolLoadSummary.candle_count,
             SymbolLoadSummary.last_loaded_time.label("summary_last_loaded_time"),
+            candle_range.c.start_period,
+            candle_range.c.end_period,
         )
         .outerjoin(SymbolLoadSummary, SymbolLoadSummary.symbol == Instrument.symbol)
+        .outerjoin(candle_range, candle_range.c.symbol == Instrument.symbol)
         .order_by(Instrument.symbol)
         .all()
     )
 
     status = []
-    for symbol, instrument_last_loaded_time, candle_count, summary_last_loaded_time in rows:
+    for symbol, instrument_last_loaded_time, candle_count, summary_last_loaded_time, start_period, end_period in rows:
         last_loaded_time = summary_last_loaded_time or instrument_last_loaded_time
         status.append({
             "symbol": symbol,
             "candle_count": candle_count or 0,
             "last_loaded_time": last_loaded_time.isoformat() if last_loaded_time else None,
+            "start_period": start_period.isoformat() if start_period else None,
+            "end_period": end_period.isoformat() if end_period else None,
         })
 
     return status

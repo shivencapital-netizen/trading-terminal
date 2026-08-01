@@ -4,11 +4,24 @@ import { Sparklines, SparklinesLine } from "react-sparklines";
 export default function ScreenerResults({
   results,
   mode,
+  pageTitle,
   selectedSymbol,
   onRowClick,
+  sortField,
+  sortDirection,
+  onSort,
 }) {
   const formatNumber = (num) =>
     num?.toLocaleString("en-US", { maximumFractionDigits: 2 });
+
+  const getSortIndicator = (field) =>
+    sortField === field ? (sortDirection === "asc" ? " ▲" : " ▼") : "";
+
+  const showQQQColumns = results.some(
+    (row) => row.qqq_rank != null || row.qqq_weight != null
+  );
+
+  const emptyColSpan = 9 + (mode === "history" ? 4 : 0) + (showQQQColumns ? 2 : 0);
 
   return (
     <div
@@ -33,34 +46,36 @@ export default function ScreenerResults({
           flex: "0 0 auto",
         }}
       >
-        <h2
+          <div>
+            <h2
+              style={{
+                margin: 0,
+                fontWeight: 600,
+                color: "#222",
+                letterSpacing: "0.5px",
+              }}
+            >
+              {pageTitle || (mode === "history" ? "History Screener Results" : "Live Screener Results")}
+            </h2>
+            <div style={{ color: "#666", fontSize: "14px", marginTop: "6px" }}>
+              {mode === "history" ? "History mode" : "Live mode"}
+            </div>
+          </div>
+        </div>
+
+        <div
           style={{
-            margin: 0,
-            fontWeight: 600,
-            color: "#222",
-            letterSpacing: "0.5px",
+            flex: 1,
+            minHeight: 0,
+            background: "white",
+            borderRadius: "10px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
           }}
         >
-          {mode === "history" ? "History Screener Results" : "Live Screener Results"}
-        </h2>
-        <span style={{ color: "#666", fontSize: "14px" }}>
-          {results.length} rows
-        </span>
-      </div>
-
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          background: "white",
-          borderRadius: "10px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
-        <div style={{ flex: 1, minHeight: 0, maxHeight: "100%", overflowY: "auto" }}>
+          <div style={{ flex: 1, minHeight: 0, maxHeight: "100%", overflowY: "auto" }}>
           <table style={{ width: "100%", minWidth: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr
@@ -69,19 +84,96 @@ export default function ScreenerResults({
                 borderBottom: "2px solid #dee2e6",
               }}
             >
-              <th style={{ ...headerCell, textAlign: "left" }}>Symbol</th>
-              <th style={{ ...headerCell, textAlign: "right" }}>High</th>
-              <th style={{ ...headerCell, textAlign: "right" }}>Last Price</th>
-              <th style={{ ...headerCell, textAlign: "right" }}>Low</th>
-              <th style={{ ...headerCell, textAlign: "right" }}>VWAP</th>
-              <th style={{ ...headerCell, textAlign: "right" }}>% Change</th>
-              <th style={{ ...headerCell, textAlign: "right" }}>Volume</th>
+              <th
+                style={{ ...headerCell, textAlign: "left", cursor: "pointer" }}
+                onClick={() => onSort("symbol")}
+              >
+                Symbol{getSortIndicator("symbol")}
+              </th>
+              {showQQQColumns && (
+                <>
+                  <th
+                    style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                    onClick={() => onSort("qqq_rank")}
+                  >
+                    QQQ Rank{getSortIndicator("qqq_rank")}
+                  </th>
+                  <th
+                    style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                    onClick={() => onSort("qqq_weight")}
+                  >
+                    QQQ Weight{getSortIndicator("qqq_weight")}
+                  </th>
+                </>
+              )}
+              <th
+                style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                onClick={() => onSort("high")}
+              >
+                High{getSortIndicator("high")}
+              </th>
+              <th
+                style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                onClick={() => onSort("last_price")}
+              >
+                Last Price{getSortIndicator("last_price")}
+              </th>
+              <th
+                style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                onClick={() => onSort("diff_percent")}
+              >
+                Diff%{getSortIndicator("diff_percent")}
+              </th>
+              <th
+                style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                onClick={() => onSort("low")}
+              >
+                Low{getSortIndicator("low")}
+              </th>
+              <th
+                style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                onClick={() => onSort("vwap")}
+              >
+                VWAP{getSortIndicator("vwap")}
+              </th>
+              <th
+                style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                onClick={() => onSort("percent_change")}
+              >
+                % Change{getSortIndicator("percent_change")}
+              </th>
+              <th
+                style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                onClick={() => onSort("volume")}
+              >
+                Volume{getSortIndicator("volume")}
+              </th>
               {mode === "history" && (
                 <>
-                  <th style={{ ...headerCell, textAlign: "right" }}>Score</th>
-                  <th style={{ ...headerCell, textAlign: "right" }}>RSI</th>
-                  <th style={{ ...headerCell, textAlign: "right" }}>SMA Cross</th>
-                  <th style={{ ...headerCell, textAlign: "right" }}>RSI Div</th>
+                  <th
+                    style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                    onClick={() => onSort("score")}
+                  >
+                    Score{getSortIndicator("score")}
+                  </th>
+                  <th
+                    style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                    onClick={() => onSort("rsi")}
+                  >
+                    RSI{getSortIndicator("rsi")}
+                  </th>
+                  <th
+                    style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                    onClick={() => onSort("sma_bullish_crossover")}
+                  >
+                    SMA Cross{getSortIndicator("sma_bullish_crossover")}
+                  </th>
+                  <th
+                    style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                    onClick={() => onSort("rsi_bullish_divergence")}
+                  >
+                    RSI Div{getSortIndicator("rsi_bullish_divergence")}
+                  </th>
                 </>
               )}
               <th style={{ ...headerCell, textAlign: "center" }}>Chart</th>
@@ -92,7 +184,7 @@ export default function ScreenerResults({
             {results.length === 0 && (
               <tr>
                 <td
-                  colSpan="8"
+                  colSpan={emptyColSpan}
                   style={{
                     padding: "20px",
                     textAlign: "center",
@@ -129,9 +221,17 @@ export default function ScreenerResults({
                 >
                   <td style={cellSymbol}>{row.symbol}</td>
 
+                  {showQQQColumns && (
+                    <>
+                      <td style={cellNumber}>{row.qqq_rank != null ? row.qqq_rank : "-"}</td>
+                      <td style={cellNumber}>{row.qqq_weight != null ? `${row.qqq_weight.toFixed(1)}%` : "-"}</td>
+                    </>
+                  )}
+
                   <td style={cellNumber}>{formatNumber(row.high)}</td>
 
                   <td style={cellNumber}>{formatNumber(row.last_price)}</td>
+                  <td style={cellNumber}>{row.diff_percent != null ? `${row.diff_percent.toFixed(2)}%` : "-"}</td>
 
                   <td style={cellNumber}>{formatNumber(row.low)}</td>
 
