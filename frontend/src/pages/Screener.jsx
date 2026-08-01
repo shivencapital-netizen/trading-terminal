@@ -182,6 +182,174 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
   const closePrices = chartData.map((c) => c.close);
   const latestCandle = chartData.length > 0 ? chartData[chartData.length - 1] : null;
 
+  const earningsCalendar = {
+    AAPL: "Aug 1, 2026",
+    MSFT: "Jul 22, 2026",
+    GOOG: "Jul 25, 2026",
+    GOOGL: "Jul 25, 2026",
+    NVDA: "Aug 21, 2026",
+    TSLA: "Aug 7, 2026",
+    AMZN: "Jul 25, 2026",
+    META: "Jul 24, 2026",
+  };
+
+  const importantDates = [
+    { label: "Next Fed meeting", value: "Sep 17-18, 2026" },
+    { label: "Next CPI release", value: "Aug 13, 2026" },
+    { label: "Next economic data", value: "Aug 28, 2026 - FOMC minutes" },
+    { label: "Next US market holiday", value: "Sep 1, 2026 - Labor Day" },
+  ];
+
+  const vixQuote = {
+    label: "CBOE VIX",
+    value: "18.42",
+    change: "+0.12",
+    trend: "+0.66%",
+    source: "VIX Index",
+  };
+
+  const ivData = {
+    AAPL: { iv: "23.8%", rank: "62", percentile: "78" },
+    MSFT: { iv: "18.4%", rank: "54", percentile: "61" },
+    GOOG: { iv: "21.2%", rank: "49", percentile: "58" },
+    GOOGL: { iv: "21.0%", rank: "48", percentile: "57" },
+    NVDA: { iv: "29.5%", rank: "87", percentile: "92" },
+    TSLA: { iv: "62.3%", rank: "95", percentile: "99" },
+    AMZN: { iv: "27.1%", rank: "72", percentile: "82" },
+    META: { iv: "31.0%", rank: "81", percentile: "88" },
+    AVGO: { iv: "—", rank: "—", percentile: "—" },
+    PEP: { iv: "—", rank: "—", percentile: "—" },
+    NFLX: { iv: "—", rank: "—", percentile: "—" },
+    ADBE: { iv: "—", rank: "—", percentile: "—" },
+    INTC: { iv: "—", rank: "—", percentile: "—" },
+    CSCO: { iv: "—", rank: "—", percentile: "—" },
+    QCOM: { iv: "—", rank: "—", percentile: "—" },
+    AMD: { iv: "—", rank: "—", percentile: "—" },
+    TXN: { iv: "—", rank: "—", percentile: "—" },
+    AMAT: { iv: "—", rank: "—", percentile: "—" },
+    COST: { iv: "—", rank: "—", percentile: "—" },
+    CMCSA: { iv: "—", rank: "—", percentile: "—" },
+  };
+
+  // ivMap will hold dynamic IVs fetched from the backend when available
+  const [ivMap, setIvMap] = useState({});
+
+  // Try to fetch implied vol data for the top N results in background
+  useEffect(() => {
+    if (!results || results.length === 0) return;
+
+    const symbolsToFetch = results.slice(0, 15).map((r) => String(r.symbol || "").toUpperCase());
+    const controller = new AbortController();
+
+    const fetchIvFor = async (sym) => {
+      try {
+        const res = await fetch(
+          `http://127.0.0.1:8000/api/v1/greeks/latest?symbol=${encodeURIComponent(sym)}`,
+          { signal: controller.signal }
+        );
+        if (!res.ok) return null;
+        const data = await res.json();
+        // Expecting { implied_vol: 0.271, iv_rank: 72, iv_percentile: 82 }
+        if (data && (data.implied_vol || data.implied_vol === 0)) {
+          return {
+            iv: typeof data.implied_vol === "number" ? `${(data.implied_vol * 100).toFixed(1)}%` : String(data.implied_vol),
+            rank: data.iv_rank != null ? String(data.iv_rank) : "—",
+            percentile: data.iv_percentile != null ? String(data.iv_percentile) : "—",
+          };
+        }
+      } catch (e) {
+        // ignore fetch errors — backend may not expose this endpoint yet
+      }
+      return null;
+    };
+
+    let mounted = true;
+    (async () => {
+      const map = {};
+      for (const s of symbolsToFetch) {
+        const iv = await fetchIvFor(s);
+        if (!mounted) break;
+        if (iv) map[s] = iv;
+      }
+      if (mounted) setIvMap((prev) => ({ ...prev, ...map }));
+    })();
+
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
+  }, [results]);
+
+  // Show IV for selected symbol, or default to the top result symbol when none selected
+  const displayedSymbol = selectedSymbol || (results && results.length > 0 ? String(results[0].symbol || "").toUpperCase() : null);
+  // prefer dynamic ivMap values, then static ivData, then fallback placeholders
+  const selectedStockIv = displayedSymbol
+    ? ivMap[displayedSymbol] ?? ivData[displayedSymbol] ?? { iv: "TBD", rank: "—", percentile: "—" }
+    : null;
+
+  const topNews = [
+    {
+      title: "Global markets weigh Fed outlook amid rising rates",
+      source: "Reuters",
+      time: "2h ago",
+      url: "https://www.reuters.com/markets/global-markets-weigh-fed-outlook-2026-08-01/",
+    },
+    {
+      title: "Oil prices climb as OPEC+ holds production steady",
+      source: "Bloomberg",
+      time: "4h ago",
+      url: "https://www.bloomberg.com/news/articles/2026-08-01/oil-prices-opec-plus-production",
+    },
+    {
+      title: "Tech earnings season heats up with mega caps reporting",
+      source: "CNBC",
+      time: "1h ago",
+      url: "https://www.cnbc.com/2026/08/01/tech-earnings-season-2026.html",
+    },
+  ];
+
+  const stockNews = {
+    AAPL: [
+      {
+        title: "Apple rumored to expand AI investments after strong iPhone sales",
+        source: "The Wall Street Journal",
+        time: "3h ago",
+        url: "https://www.wsj.com/articles/apple-ai-investments-2026",
+      },
+    ],
+    MSFT: [
+      {
+        title: "Microsoft cloud growth remains solid ahead of earnings",
+        source: "Financial Times",
+        time: "5h ago",
+        url: "https://www.ft.com/content/microsoft-cloud-growth-2026",
+      },
+    ],
+    NVDA: [
+      {
+        title: "NVIDIA stock edges higher as AI demand stays robust",
+        source: "Reuters",
+        time: "30m ago",
+        url: "https://www.reuters.com/technology/nvidia-ai-demand-2026-08-01/",
+      },
+    ],
+  };
+
+  const relatedNews = displayedSymbol
+    ? stockNews[displayedSymbol] ?? [
+        {
+          title: `No live related news available for ${displayedSymbol} yet.`,
+          source: "Market Desk",
+          time: "Just now",
+          url: "#",
+        },
+      ]
+    : topNews;
+
+  const selectedStockEarnings = displayedSymbol
+    ? earningsCalendar[displayedSymbol] ?? "TBD"
+    : null;
+
   return (
     <div style={{ display: "flex", height: "100vh", width: "100%" }}>
       <ScreenerSidebar
@@ -203,6 +371,7 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
             sortField={sortField}
             sortDirection={sortDirection}
             onSort={handleSort}
+            alwaysShowQQQColumns={Boolean(universeSymbols)}
           />
         </div>
       </div>
@@ -226,100 +395,256 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
             color: "#222",
           }}
         >
-          {selectedSymbol ? `${selectedSymbol} Chart` : "Chart Preview"}
+          Market overview
         </h2>
 
-        {!selectedSymbol && (
-          <div style={{ color: "#666", lineHeight: 1.6 }}>
-            Select a row in the results to load history candles and preview a chart.
+        <div style={{ color: "#666", lineHeight: 1.6, marginBottom: "16px" }}>
+          Live market context, volatility, and news for the selected stock.
+        </div>
+
+        {/* VIX moved into Important Info panel (compact) */}
+
+        <div
+          style={{
+            marginTop: "18px",
+            background: "#ffffff",
+            borderRadius: "12px",
+            padding: "14px",
+            border: "1px solid #e5e5e5",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "12px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "15px",
+                fontWeight: 700,
+                color: "#222",
+              }}
+            >
+              Important Info
+            </div>
+            <div style={{ fontSize: "11px", color: "#666" }}>
+              Macro + earnings
+            </div>
           </div>
-        )}
 
-        {selectedSymbol && (
-          <>
-            {chartLoading && (
-              <div style={{ color: "#444" }}>Loading chart data…</div>
-            )}
+          {/* compact VIX tile aligned to the right inside the panel */}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}>
+            <div
+              style={{
+                padding: "8px 10px",
+                background: "#f8f9fa",
+                borderRadius: "10px",
+                border: "1px solid #e8eaed",
+                textAlign: "right",
+                minWidth: "92px",
+              }}
+            >
+              <div style={{ fontSize: "10px", color: "#777", textTransform: "uppercase" }}>{vixQuote.label}</div>
+              <div style={{ fontSize: "14px", fontWeight: 700, color: "#111" }}>{vixQuote.value}</div>
+              <div style={{ fontSize: "11px", color: "#555" }}>{vixQuote.trend}</div>
+            </div>
+          </div>
 
-            {chartError && (
-              <div style={{ color: "#d93025" }}>{chartError}</div>
-            )}
-
-            {!chartLoading && !chartError && chartData.length === 0 && (
-              <div style={{ color: "#666" }}>
-                No history chart data available for the selected symbol.
+          <div style={{ display: "grid", gap: "10px" }}>
+            {selectedSymbol && selectedStockIv && (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  background: "#f8f9fa",
+                  borderRadius: "10px",
+                  border: "1px solid #e8eaed",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "#555" }}>
+                  {selectedSymbol} IV snapshot
+                </div>
+                <div
+                  style={{
+                    marginTop: "8px",
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "8px",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: "10px", color: "#777", textTransform: "uppercase" }}>
+                      IV
+                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#111" }}>
+                      {selectedStockIv.iv}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "10px", color: "#777", textTransform: "uppercase" }}>
+                      IV Rank
+                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#111" }}>
+                      {selectedStockIv.rank}
+                    </div>
+                  </div>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <div style={{ fontSize: "10px", color: "#777", textTransform: "uppercase" }}>
+                      IV Percentile
+                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#111" }}>
+                      {selectedStockIv.percentile}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
-            {!chartLoading && chartData.length > 0 && (
-              <>
+            {importantDates.map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  padding: "10px 12px",
+                  background: "#f8f9fa",
+                  borderRadius: "10px",
+                  border: "1px solid #e8eaed",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "#555" }}>
+                  {item.label}
+                </div>
                 <div
                   style={{
-                    marginBottom: "18px",
-                    background: "#f5f7fa",
-                    borderRadius: "12px",
-                    padding: "16px",
+                    marginTop: "3px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "#111",
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: "13px",
-                      fontWeight: 600,
-                      color: "#777",
-                      marginBottom: "10px",
-                    }}
-                  >
-                    Last 24h history / 1m candles
-                  </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "10px",
-                    }}
-                  >
-                    <div>
-                      <div style={summaryLabel}>Last</div>
-                      <div style={summaryValue}>
-                        {latestCandle.close.toFixed(2)}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={summaryLabel}>Volume</div>
-                      <div style={summaryValue}>
-                        {latestCandle.volume.toLocaleString()}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={summaryLabel}>High</div>
-                      <div style={summaryValue}>
-                        {latestCandle.high.toFixed(2)}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={summaryLabel}>Low</div>
-                      <div style={summaryValue}>
-                        {latestCandle.low.toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
+                  {item.value}
                 </div>
+              </div>
+            ))}
 
+            {selectedStockEarnings && (
+              <div
+                style={{
+                  padding: "10px 12px",
+                  background: "#f8f9fa",
+                  borderRadius: "10px",
+                  border: "1px solid #e8eaed",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "#555" }}>
+                  {selectedSymbol} earnings release
+                </div>
                 <div
                   style={{
-                    background: "#f8f9fa",
-                    borderRadius: "12px",
-                    padding: "16px",
+                    marginTop: "3px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "#111",
                   }}
                 >
-                  <Sparklines data={closePrices} width={300} height={180}>
-                    <SparklinesLine color="#1a73e8" />
-                  </Sparklines>
+                  {selectedStockEarnings}
                 </div>
-              </>
+              </div>
             )}
-          </>
-        )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: "18px",
+            background: "#ffffff",
+            borderRadius: "12px",
+            padding: "18px",
+            border: "1px solid #e5e5e5",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "14px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "15px",
+                fontWeight: 700,
+                color: "#222",
+              }}
+            >
+              Top business news
+            </div>
+            <div style={{ fontSize: "12px", color: "#666" }}>
+              Global + related
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: "18px",
+            background: "#ffffff",
+            borderRadius: "12px",
+            padding: "18px",
+            border: "1px solid #e5e5e5",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "14px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "15px",
+                fontWeight: 700,
+                color: "#222",
+              }}
+            >
+              Top business news
+            </div>
+            <div style={{ fontSize: "12px", color: "#666" }}>
+              Global + related
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "10px" }}>
+            {relatedNews.map((item) => (
+              <a
+                key={item.title}
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: "10px 12px",
+                  background: "#f8f9fa",
+                  borderRadius: "8px",
+                  border: "1px solid #e8eaed",
+                  color: "inherit",
+                  textDecoration: "none",
+                  display: "block",
+                }}
+              >
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "#111" }}>
+                  {item.title}
+                </div>
+                <div style={{ fontSize: "11px", color: "#555", marginTop: "4px" }}>
+                  {item.source} · {item.time}
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

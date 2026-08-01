@@ -10,6 +10,7 @@ export default function ScreenerResults({
   sortField,
   sortDirection,
   onSort,
+  alwaysShowQQQColumns = false,
 }) {
   const formatNumber = (num) =>
     num?.toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -17,9 +18,9 @@ export default function ScreenerResults({
   const getSortIndicator = (field) =>
     sortField === field ? (sortDirection === "asc" ? " ▲" : " ▼") : "";
 
-  const showQQQColumns = results.some(
-    (row) => row.qqq_rank != null || row.qqq_weight != null
-  );
+  const showQQQColumns =
+    alwaysShowQQQColumns ||
+    results.some((row) => row.qqq_rank != null || row.qqq_weight != null);
 
   const emptyColSpan = 9 + (mode === "history" ? 4 : 0) + (showQQQColumns ? 2 : 0);
 
@@ -219,7 +220,20 @@ export default function ScreenerResults({
                     (e.currentTarget.style.background = active ? "#eaf4ff" : "white")
                   }
                 >
-                  <td style={cellSymbol}>{row.symbol}</td>
+                  <td style={cellSymbol}>
+                    <a
+                      href={`https://www.tradingview.com/chart/?symbol=NASDAQ:${encodeURIComponent(
+                        row.symbol
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ color: "#1a73e8", textDecoration: "none" }}
+                      title={`Open ${row.symbol} TradingView chart`}
+                    >
+                      {row.symbol}
+                    </a>
+                  </td>
 
                   {showQQQColumns && (
                     <>
