@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
 from typing import Optional
 from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from alpaca.data.historical import StockHistoricalDataClient
@@ -83,7 +84,7 @@ def load_history_1m(
         print(f"⚠ No historical data returned for {symbol}")
         return 0
 
-    inserted = 0
+    rows_to_insert = []
 
     for index, row in df.iterrows():
         # Extract timestamp from MultiIndex (symbol, timestamp)
@@ -98,31 +99,26 @@ def load_history_1m(
         else:
             ts = ts.astimezone(ZoneInfo("America/New_York"))
 
-        candle = Candle1m(
-            symbol=symbol,
-            start_time=ts,
-            open=float(row["open"]),
-            high=float(row["high"]),
-            low=float(row["low"]),
-            close=float(row["close"]),
-            volume=int(row["volume"]),
+        rows_to_insert.append(
+            {
+                "symbol": symbol,
+                "start_time": ts,
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": int(row["volume"]),
+            }
         )
 
-        # Skip duplicates
-        exists = (
-            db.query(Candle1m)
-            .filter(Candle1m.symbol == symbol)
-            .filter(Candle1m.start_time == ts)
-            .first()
-        )
+    inserted = 0
+    if rows_to_insert:
+        stmt = pg_insert(Candle1m).values(rows_to_insert)
+        stmt = stmt.on_conflict_do_nothing(index_elements=["symbol", "start_time"])
+        result = db.execute(stmt)
+        inserted = result.rowcount or 0
+        db.commit()
 
-        if exists:
-            continue
-
-        db.add(candle)
-        inserted += 1
-
-    db.commit()
     print(f"✅ Inserted {inserted} candles for {symbol}")
     update_instrument_last_loaded_time(db, symbol)
     refresh_symbol_load_summary(db, symbol)
@@ -171,6 +167,23 @@ def get_latest_candle_time(db: Session, symbol: str) -> Optional[datetime]:
     else:
         latest_time = latest_time.astimezone(ZoneInfo("America/New_York"))
     return latest_time
+
+
+def get_earliest_candle_time(db: Session, symbol: str) -> Optional[datetime]:
+    symbol = symbol.upper()
+    earliest_time = (
+        db.query(func.min(Candle1m.start_time))
+        .filter(Candle1m.symbol == symbol)
+        .scalar()
+    )
+    if earliest_time is None:
+        return None
+
+    if getattr(earliest_time, "tzinfo", None) is None:
+        earliest_time = earliest_time.replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("America/New_York"))
+    else:
+        earliest_time = earliest_time.astimezone(ZoneInfo("America/New_York"))
+    return earliest_time
 
 
 def update_instrument_last_loaded_time(db: Session, symbol: str):
@@ -284,5 +297,57 @@ def load_history_1m_delta(
     inserted = load_history_1m(db, symbol, start=start, end=end)
     if inserted:
         update_latest_candle_snapshot(db, symbol)
+        refresh_symbol_load_summary(db, symbol)
+    return inserted
+
+
+def load_history_1m_backfill_missing(
+    db: Session,
+    symbol: str,
+    years: int = 7,
+    end: Optional[datetime] = None,
+):
+    """
+    Backfill only the missing older portion for a symbol up to `years` back.
+    - If the symbol has no candles, this loads the full `years` window.
+    - If candles exist but start too recently, this loads only the gap before earliest candle.
+    - If already covered for `years`, inserts 0 rows.
+    """
+    symbol = symbol.upper()
+
+    if end is None:
+        end = datetime.now(ZoneInfo("America/New_York"))
+    elif getattr(end, "tzinfo", None) is None:
+        end = end.replace(tzinfo=ZoneInfo("America/New_York"))
+    else:
+        end = end.astimezone(ZoneInfo("America/New_York"))
+
+    target_start = end - timedelta(days=365 * years)
+    earliest_time = get_earliest_candle_time(db, symbol)
+
+    if earliest_time is None:
+        print(
+            f"📥 No existing candles for {symbol}; backfilling last {years} year(s) from {target_start.isoformat()} to {end.isoformat()}"
+        )
+        inserted = load_history_1m(db, symbol, start=target_start, end=end)
+        if inserted:
+            update_latest_candle_snapshot(db, symbol)
+            refresh_symbol_load_summary(db, symbol)
+        return inserted
+
+    if earliest_time <= target_start:
+        print(f"✅ {symbol} already has >= {years} years of history. No backfill needed.")
+        return 0
+
+    gap_end = earliest_time - timedelta(minutes=1)
+    if target_start >= gap_end:
+        print(f"✅ {symbol} has no backfill gap in requested window.")
+        return 0
+
+    print(
+        f"🧩 Backfilling missing history for {symbol} from {target_start.isoformat()} to {gap_end.isoformat()}"
+    )
+    inserted = load_history_1m(db, symbol, start=target_start, end=gap_end)
+    if inserted:
         refresh_symbol_load_summary(db, symbol)
     return inserted

@@ -86,16 +86,16 @@ export default function ScreenerResults({
               }}
             >
               <th
-                style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
-                onClick={() => onSort("open")}
-              >
-                Open{getSortIndicator("open")}
-              </th>
-              <th
                 style={{ ...headerCell, textAlign: "left", cursor: "pointer" }}
                 onClick={() => onSort("symbol")}
               >
                 Symbol{getSortIndicator("symbol")}
+              </th>
+              <th
+                style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                onClick={() => onSort("open")}
+              >
+                Open{getSortIndicator("open")}
               </th>
               {showQQQColumns && (
                 <>
@@ -226,8 +226,6 @@ export default function ScreenerResults({
                     (e.currentTarget.style.background = active ? "#eaf4ff" : "white")
                   }
                 >
-                  <td style={cellNumber}>{formatNumber(row.open)}</td>
-
                   <td style={cellSymbol}>
                     <a
                       href={`https://www.tradingview.com/chart/?symbol=NASDAQ:${encodeURIComponent(
@@ -242,6 +240,7 @@ export default function ScreenerResults({
                       {row.symbol}
                     </a>
                   </td>
+                  <td style={cellNumber}>{formatNumber(row.open)}</td>
 
                   {showQQQColumns && (
                     <>

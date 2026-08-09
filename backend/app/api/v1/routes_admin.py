@@ -6,7 +6,11 @@ from typing import Optional
 from alpaca.common.exceptions import APIError
 
 from app.db.session import get_db
-from app.services.history_loader import load_history_1m, load_history_1m_delta
+from app.services.history_loader import (
+    load_history_1m,
+    load_history_1m_delta,
+    load_history_1m_backfill_missing,
+)
 from app.services.live_loader import refresh_live_today_symbol, refresh_live_today_all
 from app.models.instrument import Instrument
 from app.models.candles_1m import Candle1m
@@ -87,6 +91,15 @@ def load_history_1m_delta_api(
     Loads only new 1-minute bars for a symbol and updates the latest candle snapshot.
     If no previous data exists, the endpoint will backfill the last `years` years.
     """
+    if symbol and mode == "backfill-missing":
+        inserted = load_history_1m_backfill_missing(db, symbol, years)
+        return {
+            "symbol": symbol.upper(),
+            "inserted": inserted,
+            "mode": "backfill-missing",
+            "years": years,
+        }
+
     if symbol:
         inserted = load_history_1m_delta(db, symbol, years)
         return {
@@ -104,6 +117,20 @@ def load_history_1m_delta_api(
             "symbol": "NEVER",
             "symbol_count": len(symbols),
             "inserted": total_inserted
+        }
+
+    if mode == "backfill-missing":
+        symbols = get_all_symbols(db)
+        total_inserted = 0
+        for symbol_name in symbols:
+            total_inserted += load_history_1m_backfill_missing(db, symbol_name, years)
+
+        return {
+            "symbol": "ALL",
+            "symbol_count": len(symbols),
+            "inserted": total_inserted,
+            "mode": "backfill-missing",
+            "years": years,
         }
 
     symbols = get_all_symbols(db)

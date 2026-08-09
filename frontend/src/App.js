@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Screener from "./pages/Screener";
 import DataLoader from "./pages/DataLoader";
+import MAScreener from "./pages/MAScreener";
 
 const QQQ_SYMBOLS = [
   "AAPL",
@@ -126,6 +127,27 @@ function App() {
         >
           ⬇️ Data Loader
         </button>
+        <button
+          onClick={() => setCurrentPage("ma")}
+          style={{
+            padding: "15px 20px",
+            background: currentPage === "ma" ? "#007bff" : "#333",
+            color: "white",
+            border: "none",
+            cursor: "pointer",
+            fontSize: "16px",
+            fontWeight: "bold",
+            transition: "background 0.3s",
+          }}
+          onMouseOver={(e) =>
+            currentPage !== "ma" && (e.target.style.background = "#555")
+          }
+          onMouseOut={(e) =>
+            currentPage !== "ma" && (e.target.style.background = "#333")
+          }
+        >
+          📈 MA Screener
+        </button>
       </div>
 
       {/* Page Content */}
@@ -139,6 +161,7 @@ function App() {
           />
         )}
         {currentPage === "dataloader" && <DataLoader />}
+        {currentPage === "ma" && <MAScreener />}
       </div>
     </div>
   );

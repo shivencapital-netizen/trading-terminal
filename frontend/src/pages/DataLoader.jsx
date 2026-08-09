@@ -16,6 +16,7 @@ export default function DataLoader() {
   const [activeTab, setActiveTab] = useState("load");
   const [incrementalScope, setIncrementalScope] = useState("one");
   const [incrementalSymbol, setIncrementalSymbol] = useState("");
+  const [backfillYears, setBackfillYears] = useState(7);
   const [fullScope, setFullScope] = useState("single");
   const [fullSymbol, setFullSymbol] = useState("");
   const [fullYears, setFullYears] = useState(1);
@@ -44,6 +45,8 @@ export default function DataLoader() {
         url += `?symbol=${incrementalSymbol.toUpperCase()}`;
       } else if (incrementalScope === "never") {
         url += "?mode=never";
+      } else if (incrementalScope === "backfill-missing") {
+        url += `?mode=backfill-missing&years=${backfillYears}`;
       }
 
       const res = await fetch(url, { method: "POST" });
@@ -53,6 +56,10 @@ export default function DataLoader() {
         if (incrementalScope === "never") {
           setMessage(
             `✅ Loaded ${data.inserted} candles for ${data.symbol_count || 0} never-loaded symbols`
+          );
+        } else if (incrementalScope === "backfill-missing") {
+          setMessage(
+            `✅ Backfilled missing candles: ${data.inserted} rows across ${data.symbol_count || 0} symbols (${backfillYears} years window)`
           );
         } else {
           setMessage(`✅ Incremental loaded ${data.inserted} candles for ${data.symbol}`);
@@ -342,8 +349,39 @@ export default function DataLoader() {
                   />
                   Never-loaded symbols only
                 </label>
+                <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    value="backfill-missing"
+                    checked={incrementalScope === "backfill-missing"}
+                    onChange={(e) => setIncrementalScope(e.target.value)}
+                    style={{ marginRight: "5px" }}
+                  />
+                  Backfill missing history (all symbols)
+                </label>
               </div>
             </div>
+
+            {incrementalScope === "backfill-missing" && (
+              <div>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Years window
+                </label>
+                <input
+                  type="number"
+                  value={backfillYears}
+                  onChange={(e) => setBackfillYears(Math.max(1, parseInt(e.target.value) || 1))}
+                  min="1"
+                  max="15"
+                  style={{
+                    padding: "8px",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                    width: "100px",
+                  }}
+                />
+              </div>
+            )}
 
             {incrementalScope === "one" && (
               <div>

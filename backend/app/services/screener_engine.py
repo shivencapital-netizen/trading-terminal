@@ -20,6 +20,20 @@ def get_sparkline(candles, limit=30):
     return closes[::-1]  # reverse to chronological
 
 
+def get_previous_day_last_close(db: Session, symbol: str, session_date: date):
+    """Return the latest 1m close before the provided session date."""
+    row = (
+        db.query(Candle1m.close)
+        .filter(
+            Candle1m.symbol == symbol,
+            func.date(Candle1m.start_time) < session_date,
+        )
+        .order_by(Candle1m.start_time.desc())
+        .first()
+    )
+    return float(row[0]) if row else None
+
+
 def run_screener(db: Session):
     """
     Computes screener metrics for all symbols that have:
@@ -56,9 +70,11 @@ def run_screener(db: Session):
         volumes = [c.volume for c in candles]
 
         open_price = closes[-1]
+        session_date = candles[0].timestamp.date()
+        reference_close = get_previous_day_last_close(db, sym, session_date) or open_price
         percent_change = (
-            (last_price - open_price) / open_price * 100
-            if open_price > 0 else 0
+            (last_price - reference_close) / reference_close * 100
+            if reference_close > 0 else 0
         )
 
         total_volume = sum(volumes)
@@ -203,9 +219,11 @@ def run_history_screener(db: Session, filters: Optional[ScreenerFilters] = None)
         volumes = [c.volume for c in candles]
 
         open_price = closes[-1]
+        session_date = latest.start_time.date()
+        reference_close = get_previous_day_last_close(db, sym, session_date) or open_price
         percent_change = (
-            (last_price - open_price) / open_price * 100
-            if open_price > 0 else 0
+            (last_price - reference_close) / reference_close * 100
+            if reference_close > 0 else 0
         )
 
         total_volume = sum(volumes[:60])
