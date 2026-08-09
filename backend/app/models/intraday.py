@@ -13,17 +13,3 @@ class IntradayCandle(Base):
     close = Column(Float)
     volume = Column(BigInteger)
     timeframe = Column(String, default="1m")
-
-
-class ScreenerResult(Base):
-    __tablename__ = "screener_results"
-
-    symbol = Column(String, primary_key=True)
-    last_price = Column(Float)
-    day_high = Column(Float)
-    day_low = Column(Float)
-    prev_close = Column(Float)
-    volume = Column(BigInteger)
-    percent_change = Column(Float)
-    sparkline = Column(JSON)
-    updated_at = Column(TIMESTAMP)

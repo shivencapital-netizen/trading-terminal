@@ -1,5 +1,17 @@
 import { useState, useEffect } from "react";
 
+const API_BASE = process.env.REACT_APP_API_BASE || "http://127.0.0.1:8000";
+
+const parseJsonResponse = async (res) => {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return { detail: text };
+  }
+};
+
 export default function DataLoader() {
   const [activeTab, setActiveTab] = useState("load");
   const [incrementalScope, setIncrementalScope] = useState("one");
@@ -13,6 +25,7 @@ export default function DataLoader() {
   const [deleteMode, setDeleteMode] = useState("symbol-year");
   const [deleteSymbol, setDeleteSymbol] = useState("");
   const [deleteYear, setDeleteYear] = useState(new Date().getFullYear());
+  const [refreshSymbol, setRefreshSymbol] = useState("");
 
   const runIncremental = async (e) => {
     e.preventDefault();
@@ -26,7 +39,7 @@ export default function DataLoader() {
     setMessage("⏳ Running incremental update...");
 
     try {
-      let url = "http://127.0.0.1:8000/api/v1/admin/load-history-1m-delta";
+      let url = `${API_BASE}/api/v1/admin/load-history-1m-delta`;
       if (incrementalScope === "one") {
         url += `?symbol=${incrementalSymbol.toUpperCase()}`;
       } else if (incrementalScope === "never") {
@@ -34,7 +47,7 @@ export default function DataLoader() {
       }
 
       const res = await fetch(url, { method: "POST" });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
 
       if (res.ok) {
         if (incrementalScope === "never") {
@@ -69,7 +82,7 @@ export default function DataLoader() {
     setMessage("⏳ Running full load...");
 
     try {
-      let url = "http://127.0.0.1:8000/api/v1/admin/load-history-1m";
+      let url = `${API_BASE}/api/v1/admin/load-history-1m`;
       if (fullScope === "single") {
         url += `?symbol=${fullSymbol.toUpperCase()}&years=${fullYears}`;
       } else if (fullScope === "all-one-year") {
@@ -79,7 +92,7 @@ export default function DataLoader() {
       }
 
       const res = await fetch(url, { method: "POST" });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
 
       if (res.ok) {
         const displayTarget = data.symbol === "ALL" ? "all symbols" : data.symbol;
@@ -100,13 +113,44 @@ export default function DataLoader() {
   const fetchSymbolStatus = async () => {
     
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/admin/symbol-status");
+      const res = await fetch(`${API_BASE}/api/v1/admin/symbol-status`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         setSymbolStatus(Array.isArray(data) ? data : []);
       }
     } catch (err) {
       console.error("Status fetch error:", err);
+    }
+  };
+
+  const refreshLiveToday = async (e) => {
+    e.preventDefault();
+
+    setLoading(true);
+    setMessage("⏳ Refreshing today's live data...");
+
+    try {
+      let url = `${API_BASE}/api/v1/admin/refresh-live-today`;
+      if (refreshSymbol.trim()) {
+        url += `?symbol=${refreshSymbol.toUpperCase()}`;
+      }
+
+      const res = await fetch(url, { method: "POST" });
+      const data = await parseJsonResponse(res);
+
+      if (res.ok) {
+        const target = refreshSymbol.trim() ? refreshSymbol.toUpperCase() : "all symbols";
+        setMessage(`✅ Refreshed today data for ${target}: ${data.inserted} candles inserted.`);
+        setRefreshSymbol("");
+        fetchSymbolStatus();
+      } else {
+        setMessage(`❌ Error: ${data.detail || "Failed to refresh live data"}`);
+      }
+    } catch (err) {
+      console.error("Refresh live data error:", err);
+      setMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -143,7 +187,7 @@ export default function DataLoader() {
     setMessage("⏳ Deleting...");
 
     try {
-      let url = "http://127.0.0.1:8000/api/v1/admin/delete-history-1m";
+      let url = `${API_BASE}/api/v1/admin/delete-history-1m`;
 
       if (deleteMode === "all") {
         url += "?mode=all";
@@ -156,7 +200,7 @@ export default function DataLoader() {
       }
 
       const res = await fetch(url, { method: "POST" });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
 
       if (res.ok) {
         setMessage(`✅ Deleted ${data.deleted || 0} candles successfully`);
@@ -339,6 +383,49 @@ export default function DataLoader() {
               </button>
             </div>
           </form>
+
+          <div style={{ height: "1px", background: "#ddd", margin: "30px 0" }} />
+
+          <div>
+            <h3>Refresh Live Today</h3>
+            <form onSubmit={refreshLiveToday} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+              <div>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Symbol (leave blank to refresh all symbols)
+                </label>
+                <input
+                  type="text"
+                  value={refreshSymbol}
+                  onChange={(e) => setRefreshSymbol(e.target.value.toUpperCase())}
+                  placeholder="e.g., AAPL"
+                  style={{
+                    padding: "8px",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                    width: "150px",
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "flex-end" }}>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    padding: "8px 20px",
+                    background: loading ? "#ccc" : "#17a2b8",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: loading ? "not-allowed" : "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {loading ? "Refreshing..." : "Refresh Live Today"}
+                </button>
+              </div>
+            </form>
+          </div>
 
           <div style={{ height: "1px", background: "#ddd", margin: "30px 0" }} />
 

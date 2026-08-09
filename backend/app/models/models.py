@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from app.db.base_class import Base
 
 
 # ---------------------------------------------------------
@@ -91,35 +91,8 @@ class User(Base):
 
 
 # ---------------------------------------------------------
-# Instruments (stocks, options, futures, etc.)
+# Instruments are defined in app.models.instrument to avoid duplicate table definitions.
 # ---------------------------------------------------------
-class Instrument(Base):
-    __tablename__ = "instruments"
-
-    id = Column(Integer, primary_key=True, index=True)
-    symbol = Column(String(50), index=True, nullable=False)
-    name = Column(String(255), nullable=True)
-    asset_type = Column(String(50), nullable=False)  # STOCK, OPTION, FUTURE, ETF, etc.
-    exchange = Column(String(50), nullable=True)
-    currency = Column(String(10), default="USD", nullable=False)
-    tick_size = Column(Float, nullable=True)
-    lot_size = Column(Integer, nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False)
-
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
-    )
-
-    trades = relationship("Trade", back_populates="instrument")
-    positions = relationship("Position", back_populates="instrument")
-    orders = relationship("Order", back_populates="instrument")
-    greeks_snapshots = relationship("GreeksSnapshot", back_populates="instrument")
-    screener_results = relationship("ScreenerResult", back_populates="instrument")
-
-    __table_args__ = (
-        UniqueConstraint("symbol", "asset_type", name="uq_instrument_symbol_asset_type"),
-    )
 
 
 # ---------------------------------------------------------

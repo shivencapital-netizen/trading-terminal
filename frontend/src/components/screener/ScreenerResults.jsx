@@ -22,7 +22,7 @@ export default function ScreenerResults({
     alwaysShowQQQColumns ||
     results.some((row) => row.qqq_rank != null || row.qqq_weight != null);
 
-  const emptyColSpan = 9 + (mode === "history" ? 4 : 0) + (showQQQColumns ? 2 : 0);
+  const emptyColSpan = 10 + (mode === "history" ? 4 : 0) + (showQQQColumns ? 2 : 0);
 
   return (
     <div
@@ -85,6 +85,12 @@ export default function ScreenerResults({
                 borderBottom: "2px solid #dee2e6",
               }}
             >
+              <th
+                style={{ ...headerCell, textAlign: "right", cursor: "pointer" }}
+                onClick={() => onSort("open")}
+              >
+                Open{getSortIndicator("open")}
+              </th>
               <th
                 style={{ ...headerCell, textAlign: "left", cursor: "pointer" }}
                 onClick={() => onSort("symbol")}
@@ -220,6 +226,8 @@ export default function ScreenerResults({
                     (e.currentTarget.style.background = active ? "#eaf4ff" : "white")
                   }
                 >
+                  <td style={cellNumber}>{formatNumber(row.open)}</td>
+
                   <td style={cellSymbol}>
                     <a
                       href={`https://www.tradingview.com/chart/?symbol=NASDAQ:${encodeURIComponent(

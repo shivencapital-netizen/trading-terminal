@@ -3,8 +3,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
 
+from alpaca.common.exceptions import APIError
+
 from app.db.session import get_db
 from app.services.history_loader import load_history_1m, load_history_1m_delta
+from app.services.live_loader import refresh_live_today_symbol, refresh_live_today_all
 from app.models.instrument import Instrument
 from app.models.candles_1m import Candle1m
 from app.models.symbol_load_summary import SymbolLoadSummary
@@ -113,6 +116,50 @@ def load_history_1m_delta_api(
         "symbol_count": len(symbols),
         "inserted": total_inserted
     }
+
+
+@router.post("/refresh-live-today")
+def refresh_live_today_api(
+    symbol: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Refresh today's intraday candles from market open (9:30 ET) to now.
+    Does not affect historical candles in candles_1m for previous days.
+    """
+    try:
+        if symbol:
+            inserted = refresh_live_today_symbol(db, symbol)
+            return {
+                "symbol": symbol.upper(),
+                "inserted": inserted,
+            }
+
+        inserted = refresh_live_today_all(db)
+        return {
+            "symbol": "ALL",
+            "symbol_count": len(get_all_symbols(db)),
+            "inserted": inserted,
+        }
+    except APIError as ex:
+        message = None
+        try:
+            message = ex.message
+        except Exception:
+            message = str(ex)
+
+        status_code = getattr(ex, "status_code", None)
+        if status_code == 401:
+            message = (
+                f"{message} (check ALPACA_API_KEY and ALPACA_SECRET_KEY in backend env or .env)"
+            )
+        if not message:
+            message = "Unknown Alpaca API error"
+        raise HTTPException(status_code=502, detail=f"Alpaca API error: {message}")
+    except RuntimeError as ex:
+        raise HTTPException(status_code=500, detail=str(ex))
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(ex)}")
 
 
 # ---------------------------------------------------------

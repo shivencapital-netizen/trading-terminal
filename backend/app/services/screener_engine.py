@@ -77,6 +77,7 @@ def run_screener(db: Session):
 
         results.append({
             "symbol": sym,
+            "open": open_price,
             "last_price": last_price,
             "percent_change": round(percent_change, 2),
             "volume": total_volume,
@@ -252,6 +253,7 @@ def run_history_screener(db: Session, filters: Optional[ScreenerFilters] = None)
 
         result = {
             "symbol": sym,
+            "open": open_price,
             "last_price": last_price,
             "percent_change": round(percent_change, 2),
             "volume": total_volume,
