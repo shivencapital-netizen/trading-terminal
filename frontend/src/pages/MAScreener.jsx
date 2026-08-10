@@ -14,8 +14,8 @@ const parseJsonResponse = async (res) => {
   }
 };
 
-const getTradingViewUrl = (symbol) =>
-  `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(String(symbol || "").toUpperCase())}`;
+const getYahooChartUrl = (symbol) =>
+  `https://finance.yahoo.com/chart/${encodeURIComponent(String(symbol || "").toUpperCase())}`;
 
 export default function MAScreener() {
   const [activeTab, setActiveTab] = useState("clear");
@@ -29,6 +29,7 @@ export default function MAScreener() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [rows, setRows] = useState([]);
+  const [periodSort, setPeriodSort] = useState({ key: "fast_period", direction: "asc" });
 
   const queryLabel = useMemo(() => {
     const dirText = direction === "above" ? "from below (crossed above)" : "from above (crossed below)";
@@ -186,6 +187,48 @@ export default function MAScreener() {
 
   const loadSelectedSignals = async () => loadSavedSignals(false);
 
+  const togglePeriodSort = (key) => {
+    setPeriodSort((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return {
+        key,
+        direction: "asc",
+      };
+    });
+  };
+
+  const getSortIndicator = (key) => {
+    if (periodSort.key !== key) {
+      return "";
+    }
+    return periodSort.direction === "asc" ? " ▲" : " ▼";
+  };
+
+  const sortedRows = useMemo(() => {
+    const copy = [...rows];
+    const factor = periodSort.direction === "asc" ? 1 : -1;
+
+    copy.sort((a, b) => {
+      const left = Number(a?.[periodSort.key] ?? 0);
+      const right = Number(b?.[periodSort.key] ?? 0);
+
+      if (left !== right) {
+        return (left - right) * factor;
+      }
+
+      const symbolA = String(a?.symbol ?? "");
+      const symbolB = String(b?.symbol ?? "");
+      return symbolA.localeCompare(symbolB);
+    });
+
+    return copy;
+  }, [rows, periodSort]);
+
   const formatNum = (n, digits = 2) => (typeof n === "number" ? n.toLocaleString("en-US", { maximumFractionDigits: digits }) : "-");
 
   return (
@@ -207,56 +250,44 @@ export default function MAScreener() {
 
         <div
           style={{
-            background: "white",
-            borderRadius: "12px",
-            border: "1px solid #e4e8f0",
-            padding: "12px 14px 0",
+            background: "rgba(255,255,255,0.92)",
+            borderRadius: "18px",
+            border: "1px solid rgba(229, 231, 235, 0.9)",
+            padding: "12px 12px 0",
+            boxShadow: "0 10px 30px rgba(15, 23, 42, 0.06)",
             marginBottom: "14px",
           }}
         >
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              flexWrap: "wrap",
+              marginBottom: "12px",
+              padding: "6px",
+              borderRadius: "14px",
+              background: "#f8fafc",
+              border: "1px solid #e5e7eb",
+            }}
+          >
             <button
               type="button"
               onClick={() => setActiveTab("clear")}
-              style={{
-                padding: "10px 16px",
-                borderRadius: "10px 10px 0 0",
-                border: "1px solid #d0d5dd",
-                borderBottom: activeTab === "clear" ? "1px solid white" : "1px solid #d0d5dd",
-                background: activeTab === "clear" ? "white" : "#f8fafc",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
+              style={getTabStyle(activeTab === "clear")}
             >
               Clear
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("refresh")}
-              style={{
-                padding: "10px 16px",
-                borderRadius: "10px 10px 0 0",
-                border: "1px solid #d0d5dd",
-                borderBottom: activeTab === "refresh" ? "1px solid white" : "1px solid #d0d5dd",
-                background: activeTab === "refresh" ? "white" : "#f8fafc",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
+              style={getTabStyle(activeTab === "refresh")}
             >
               Refresh
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("screen")}
-              style={{
-                padding: "10px 16px",
-                borderRadius: "10px 10px 0 0",
-                border: "1px solid #d0d5dd",
-                borderBottom: activeTab === "screen" ? "1px solid white" : "1px solid #d0d5dd",
-                background: activeTab === "screen" ? "white" : "#f8fafc",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
+              style={getTabStyle(activeTab === "screen")}
             >
               Screening Results
             </button>
@@ -279,16 +310,7 @@ export default function MAScreener() {
                     key={family}
                     type="button"
                     onClick={() => selectFamily(family)}
-                    style={{
-                      padding: "9px 14px",
-                      borderRadius: "10px",
-                      border: selectedFamily === family ? "1px solid #2563eb" : "1px solid #d0d5dd",
-                      background: selectedFamily === family ? "#dbeafe" : "#fff",
-                      color: selectedFamily === family ? "#1d4ed8" : "#344054",
-                      fontWeight: 800,
-                      cursor: "pointer",
-                      height: "42px",
-                    }}
+                    style={getFamilyPillStyle(selectedFamily === family)}
                   >
                     {family}
                   </button>
@@ -300,15 +322,7 @@ export default function MAScreener() {
                   type="button"
                   onClick={refreshAllCache}
                   disabled={loading}
-                  style={{
-                    padding: "10px 16px",
-                    borderRadius: "10px",
-                    border: "none",
-                    background: loading ? "#98a2b3" : "#2563eb",
-                    color: "white",
-                    fontWeight: 800,
-                    cursor: loading ? "not-allowed" : "pointer",
-                  }}
+                  style={getPrimaryActionStyle(loading, false)}
                 >
                   Refresh All {selectedFamily}
                 </button>
@@ -316,14 +330,7 @@ export default function MAScreener() {
                   type="button"
                   onClick={refreshSelectedCache}
                   disabled={loading}
-                  style={{
-                    padding: "10px 16px",
-                    borderRadius: "10px",
-                    border: "1px solid #d0d5dd",
-                    background: loading ? "#98a2b3" : "#fff",
-                    fontWeight: 700,
-                    cursor: loading ? "not-allowed" : "pointer",
-                  }}
+                  style={getSecondaryActionStyle(loading)}
                 >
                   Refresh Selected Pair
                 </button>
@@ -384,16 +391,7 @@ export default function MAScreener() {
                     key={family}
                     type="button"
                     onClick={() => selectFamily(family)}
-                    style={{
-                      padding: "9px 14px",
-                      borderRadius: "10px",
-                      border: selectedFamily === family ? "1px solid #2563eb" : "1px solid #d0d5dd",
-                      background: selectedFamily === family ? "#dbeafe" : "#fff",
-                      color: selectedFamily === family ? "#1d4ed8" : "#344054",
-                      fontWeight: 800,
-                      cursor: "pointer",
-                      height: "42px",
-                    }}
+                    style={getFamilyPillStyle(selectedFamily === family)}
                   >
                     {family}
                   </button>
@@ -405,15 +403,7 @@ export default function MAScreener() {
                   type="button"
                   onClick={clearAllCache}
                   disabled={loading}
-                  style={{
-                    padding: "10px 16px",
-                    borderRadius: "10px",
-                    border: "none",
-                    background: loading ? "#98a2b3" : "#b42318",
-                    color: "white",
-                    fontWeight: 800,
-                    cursor: loading ? "not-allowed" : "pointer",
-                  }}
+                  style={getDangerActionStyle(loading, false)}
                 >
                   Clear All {selectedFamily}
                 </button>
@@ -421,14 +411,7 @@ export default function MAScreener() {
                   type="button"
                   onClick={clearSelectedCache}
                   disabled={loading}
-                  style={{
-                    padding: "10px 16px",
-                    borderRadius: "10px",
-                    border: "1px solid #d0d5dd",
-                    background: loading ? "#98a2b3" : "#fff",
-                    fontWeight: 700,
-                    cursor: loading ? "not-allowed" : "pointer",
-                  }}
+                  style={getSecondaryActionStyle(loading)}
                 >
                   Clear Selected Pair
                 </button>
@@ -488,16 +471,7 @@ export default function MAScreener() {
                   key={family}
                   type="button"
                   onClick={() => selectFamily(family)}
-                  style={{
-                    padding: "9px 14px",
-                    borderRadius: "10px",
-                    border: selectedFamily === family ? "1px solid #2563eb" : "1px solid #d0d5dd",
-                    background: selectedFamily === family ? "#dbeafe" : "#fff",
-                    color: selectedFamily === family ? "#1d4ed8" : "#344054",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                    height: "42px",
-                  }}
+                    style={getFamilyPillStyle(selectedFamily === family)}
                 >
                   {family}
                 </button>
@@ -549,11 +523,20 @@ export default function MAScreener() {
                   height: "42px",
                 }}
               >
-                {loading ? "Loading..." : "Load Screening Results"}
+                {loading ? "Loading..." : "Load All Results"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => loadSavedSignals(false)}
+                disabled={loading}
+                style={getSecondaryActionStyle(loading)}
+              >
+                Load Selected Pair
               </button>
 
               <div style={{ gridColumn: "1 / -1", color: "#667085", fontSize: "13px" }}>
-                Load the cached screening results for the selected family and filters.
+                Load All Results uses the full selected family. Load Selected Pair applies the fast/slow period filters.
               </div>
             </div>
           )}
@@ -588,24 +571,32 @@ export default function MAScreener() {
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "1200px" }}>
                 <thead>
                   <tr style={{ background: "#f8fafc" }}>
-                    {[
-                      "Symbol",
-                      "Signal Date",
-                      "Fast Period",
-                      "Slow Period",
-                      "Open",
-                      "Last",
-                      "% Change",
-                      "Prev Close",
-                      "Fast Prev",
-                      "Fast Curr",
-                      "Slow Prev",
-                      "Slow Curr",
-                      "Source Updated",
-                      "Cached At",
-                    ].map((h) => (
-                      <th key={h} style={thStyle}>{h}</th>
-                    ))}
+                    <th style={thStyle}>Symbol</th>
+                    <th style={thStyle}>Signal Date</th>
+                    <th
+                      style={{ ...thStyle, cursor: "pointer", userSelect: "none" }}
+                      onClick={() => togglePeriodSort("fast_period")}
+                      title="Sort by Fast Period"
+                    >
+                      Fast Period{getSortIndicator("fast_period")}
+                    </th>
+                    <th
+                      style={{ ...thStyle, cursor: "pointer", userSelect: "none" }}
+                      onClick={() => togglePeriodSort("slow_period")}
+                      title="Sort by Slow Period"
+                    >
+                      Slow Period{getSortIndicator("slow_period")}
+                    </th>
+                    <th style={thStyle}>Open</th>
+                    <th style={thStyle}>Last</th>
+                    <th style={thStyle}>% Change</th>
+                    <th style={thStyle}>Prev Close</th>
+                    <th style={thStyle}>Fast Prev</th>
+                    <th style={thStyle}>Fast Curr</th>
+                    <th style={thStyle}>Slow Prev</th>
+                    <th style={thStyle}>Slow Curr</th>
+                    <th style={thStyle}>Source Updated</th>
+                    <th style={thStyle}>Cached At</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -617,18 +608,18 @@ export default function MAScreener() {
                     </tr>
                   )}
 
-                  {rows.map((row) => {
+                  {sortedRows.map((row) => {
                     const up = (row.percent_change ?? 0) > 0;
                     const down = (row.percent_change ?? 0) < 0;
                     return (
                       <tr key={`${row.symbol}-${row.fast_period}-${row.slow_period}-${row.signal_date || ""}`} style={{ borderTop: "1px solid #eef2f7" }}>
                         <td style={tdSymbol}>
                           <a
-                            href={getTradingViewUrl(row.symbol)}
+                            href={getYahooChartUrl(row.symbol)}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ color: "#1d4ed8", textDecoration: "none" }}
-                            title={`Open ${row.symbol} in TradingView`}
+                            title={`Open ${row.symbol} in Yahoo Finance`}
                           >
                             {row.symbol}
                           </a>
@@ -708,3 +699,75 @@ const tdText = {
   ...tdBase,
   color: "#475467",
 };
+
+function getTabStyle(active) {
+  return {
+    padding: "10px 16px",
+    borderRadius: "12px",
+    border: active ? "1px solid rgba(37, 99, 235, 0.18)" : "1px solid transparent",
+    background: active ? "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)" : "transparent",
+    color: active ? "#1d4ed8" : "#475467",
+    fontWeight: 800,
+    cursor: "pointer",
+    boxShadow: active ? "0 6px 18px rgba(37, 99, 235, 0.10)" : "none",
+    transition: "all 150ms ease",
+  };
+}
+
+function getFamilyPillStyle(active) {
+  return {
+    padding: "10px 16px",
+    borderRadius: "999px",
+    border: active ? "1px solid #2563eb" : "1px solid #d0d5dd",
+    background: active ? "linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%)" : "#fff",
+    color: active ? "#1d4ed8" : "#344054",
+    fontWeight: 800,
+    cursor: "pointer",
+    height: "42px",
+    minWidth: "84px",
+    boxShadow: active ? "0 8px 18px rgba(37, 99, 235, 0.12)" : "0 1px 2px rgba(16, 24, 40, 0.04)",
+    transition: "all 150ms ease",
+  };
+}
+
+function getPrimaryActionStyle(loading, compact) {
+  return {
+    padding: compact ? "9px 14px" : "10px 16px",
+    borderRadius: "12px",
+    border: "none",
+    background: loading ? "#98a2b3" : "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+    color: "white",
+    fontWeight: 800,
+    cursor: loading ? "not-allowed" : "pointer",
+    boxShadow: loading ? "none" : "0 10px 20px rgba(37, 99, 235, 0.18)",
+    transition: "transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease",
+  };
+}
+
+function getSecondaryActionStyle(loading) {
+  return {
+    padding: "10px 16px",
+    borderRadius: "12px",
+    border: "1px solid #d0d5dd",
+    background: loading ? "#98a2b3" : "#fff",
+    color: loading ? "white" : "#344054",
+    fontWeight: 700,
+    cursor: loading ? "not-allowed" : "pointer",
+    boxShadow: loading ? "none" : "0 4px 12px rgba(16, 24, 40, 0.06)",
+    transition: "transform 120ms ease, box-shadow 120ms ease, background 120ms ease",
+  };
+}
+
+function getDangerActionStyle(loading, compact) {
+  return {
+    padding: compact ? "9px 14px" : "10px 16px",
+    borderRadius: "12px",
+    border: "none",
+    background: loading ? "#98a2b3" : "linear-gradient(135deg, #dc2626 0%, #b42318 100%)",
+    color: "white",
+    fontWeight: 800,
+    cursor: loading ? "not-allowed" : "pointer",
+    boxShadow: loading ? "none" : "0 10px 20px rgba(180, 35, 24, 0.16)",
+    transition: "transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease",
+  };
+}
