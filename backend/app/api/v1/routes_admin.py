@@ -5,6 +5,7 @@ from typing import Optional
 
 from alpaca.common.exceptions import APIError
 
+from app.core.market_hours import ny_now
 from app.db.session import get_db
 from app.services.history_loader import (
     load_history_1m,
@@ -14,6 +15,7 @@ from app.services.history_loader import (
 from app.services.live_loader import refresh_live_today_symbol, refresh_live_today_all
 from app.models.instrument import Instrument
 from app.models.candles_1m import Candle1m
+from app.models.intraday import IntradayCandle
 from app.models.symbol_load_summary import SymbolLoadSummary
 
 router = APIRouter()
@@ -238,6 +240,70 @@ def get_symbol_status(db: Session = Depends(get_db)):
         })
 
     return status
+
+
+@router.get("/latest-live-candles")
+def get_latest_live_candles(
+    symbol: Optional[str] = None,
+    limit: int = 600,
+    db: Session = Depends(get_db),
+):
+    """
+    Return the latest intraday candle by symbol for today's SP500/SPY universe.
+    Universe is based on the instruments table loaded in this project.
+    """
+    now = ny_now().replace(tzinfo=None)
+    today = now.date()
+
+    latest_per_symbol = (
+        db.query(
+            IntradayCandle.symbol.label("symbol"),
+            func.max(IntradayCandle.timestamp).label("latest_ts"),
+        )
+        .filter(
+            func.date(IntradayCandle.timestamp) == today,
+            IntradayCandle.timestamp <= now,
+        )
+        .group_by(IntradayCandle.symbol)
+        .subquery()
+    )
+
+    query = (
+        db.query(
+            IntradayCandle.symbol,
+            IntradayCandle.timestamp,
+            IntradayCandle.open,
+            IntradayCandle.high,
+            IntradayCandle.low,
+            IntradayCandle.close,
+            IntradayCandle.volume,
+        )
+        .join(
+            latest_per_symbol,
+            (IntradayCandle.symbol == latest_per_symbol.c.symbol)
+            & (IntradayCandle.timestamp == latest_per_symbol.c.latest_ts),
+        )
+        .join(Instrument, Instrument.symbol == IntradayCandle.symbol)
+        .order_by(IntradayCandle.symbol)
+    )
+
+    if symbol:
+        query = query.filter(IntradayCandle.symbol.ilike(f"%{symbol.upper()}%"))
+
+    rows = query.limit(max(1, min(limit, 2000))).all()
+
+    return [
+        {
+            "symbol": row.symbol,
+            "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+            "open": float(row.open),
+            "high": float(row.high),
+            "low": float(row.low),
+            "close": float(row.close),
+            "volume": int(row.volume),
+        }
+        for row in rows
+    ]
 
 
 # ---------------------------------------------------------

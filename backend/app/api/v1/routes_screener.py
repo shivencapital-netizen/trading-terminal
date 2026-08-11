@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.screener import ScreenerFilters
-from app.services.screener_engine import run_screener, run_history_screener
+from app.services.screener_engine import run_screener, run_history_screener, run_breakout_screener
 from app.services.ma_screener import (
     run_ma_crossover_screener,
     clear_ma_crossover_cache,
@@ -22,13 +22,16 @@ router = APIRouter()
 
 
 @router.get("/run")
-def run_screener_endpoint(db: Session = Depends(get_db)):
+def run_screener_endpoint(
+    filters: ScreenerFilters = Depends(),
+    db: Session = Depends(get_db),
+):
     """
     Returns computed screener metrics for all symbols that have:
     - a latest tick
     - intraday candles for today
     """
-    results = run_screener(db)
+    results = run_screener(db, filters=filters)
     return results
 
 
@@ -41,6 +44,19 @@ def run_history_screener_endpoint(
     Returns screener metrics based on historical candles in candles_1m.
     """
     results = run_history_screener(db, filters=filters)
+    return results
+
+
+@router.get("/breakouts")
+def run_breakout_screener_endpoint(
+    lookback_days: int = 5,
+    db: Session = Depends(get_db),
+):
+    """
+    Separate breakout scan: symbols currently trading above prior N-day high.
+    Independent from normal filter criteria.
+    """
+    results = run_breakout_screener(db, lookback_days=lookback_days)
     return results
 
 

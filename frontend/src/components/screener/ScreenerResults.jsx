@@ -5,6 +5,10 @@ export default function ScreenerResults({
   results,
   mode,
   pageTitle,
+  liveStatusText,
+  liveStatusActive = false,
+  breakoutEnabled = false,
+  newBreakoutSymbols,
   selectedSymbol,
   onRowClick,
   sortField,
@@ -12,8 +16,19 @@ export default function ScreenerResults({
   onSort,
   alwaysShowQQQColumns = false,
 }) {
-  const showQQQColumns = alwaysShowQQQColumns || mode === "live";
-  const emptyColSpan = showQQQColumns ? (mode === "history" ? 15 : 11) : mode === "history" ? 13 : 9;
+  const showQQQColumns = alwaysShowQQQColumns;
+  const showBreakoutTimeColumn = breakoutEnabled && mode === "live";
+  const emptyColSpan =
+    (showQQQColumns ? (mode === "history" ? 15 : 11) : mode === "history" ? 13 : 9)
+    + (showBreakoutTimeColumn ? 1 : 0);
+
+  const formatBreakoutTime = (value) => {
+    if (!value) return "-";
+    const parts = String(value).split("T");
+    const time = parts[1];
+    if (!time) return "-";
+    return `${time.slice(0, 5)} ET`;
+  };
 
   const getSortIndicator = (field) => {
     if (sortField !== field) return "";
@@ -65,6 +80,23 @@ export default function ScreenerResults({
             {mode === "history" ? "History mode" : "Live mode"}
           </div>
         </div>
+
+        {liveStatusText && (
+          <div
+            style={{
+              padding: "10px 14px",
+              borderRadius: "999px",
+              background: liveStatusActive ? "#e6f4ea" : "#fff4e5",
+              color: liveStatusActive ? "#137333" : "#8a4b00",
+              fontSize: "13px",
+              fontWeight: 600,
+              maxWidth: "50%",
+              textAlign: "right",
+            }}
+          >
+            {liveStatusText}
+          </div>
+        )}
       </div>
 
       <div
@@ -125,6 +157,11 @@ export default function ScreenerResults({
                 <th style={{ ...headerCell, textAlign: "right", cursor: "pointer" }} onClick={() => onSort("volume")}>
                   Volume{getSortIndicator("volume")}
                 </th>
+                {showBreakoutTimeColumn && (
+                  <th style={{ ...headerCell, textAlign: "right", cursor: "pointer" }} onClick={() => onSort("breakout_happened_at")}>
+                    Breakout At{getSortIndicator("breakout_happened_at")}
+                  </th>
+                )}
                 {mode === "history" && (
                   <>
                     <th style={{ ...headerCell, textAlign: "right", cursor: "pointer" }} onClick={() => onSort("score")}>
@@ -166,6 +203,24 @@ export default function ScreenerResults({
                 const isUp = row.percent_change > 0;
                 const isDown = row.percent_change < 0;
                 const active = selectedSymbol === row.symbol;
+                const isNewBreakout =
+                  breakoutEnabled &&
+                  mode === "live" &&
+                  newBreakoutSymbols &&
+                  typeof newBreakoutSymbols.has === "function" &&
+                  newBreakoutSymbols.has(String(row.symbol || "").toUpperCase());
+
+                const rowBackground = active
+                  ? "#eaf4ff"
+                  : isNewBreakout
+                    ? "#fff4cc"
+                    : "white";
+
+                const rowHoverBackground = active
+                  ? "#e7f0ff"
+                  : isNewBreakout
+                    ? "#ffefbd"
+                    : "#f8f9fa";
 
                 return (
                   <tr
@@ -173,12 +228,12 @@ export default function ScreenerResults({
                     style={{
                       borderBottom: "1px solid #eee",
                       transition: "background 0.2s, transform 0.15s",
-                      background: active ? "#eaf4ff" : "white",
+                      background: rowBackground,
                       cursor: "pointer",
                     }}
                     onClick={() => onRowClick(row.symbol)}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = active ? "#e7f0ff" : "#f8f9fa")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = active ? "#eaf4ff" : "white")}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = rowHoverBackground)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = rowBackground)}
                   >
                     <td style={cellSymbol}>
                       <a
@@ -191,6 +246,22 @@ export default function ScreenerResults({
                       >
                         {row.symbol}
                       </a>
+                      {isNewBreakout && (
+                        <span
+                          style={{
+                            marginLeft: "8px",
+                            padding: "2px 6px",
+                            borderRadius: "999px",
+                            background: "#fbbc04",
+                            color: "#3c2f00",
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            verticalAlign: "middle",
+                          }}
+                        >
+                          NEW
+                        </span>
+                      )}
                     </td>
                     <td style={cellNumber}>{formatNumber(row.open)}</td>
 
@@ -218,6 +289,9 @@ export default function ScreenerResults({
                     </td>
 
                     <td style={cellNumber}>{formatNumber(row.volume)}</td>
+                    {showBreakoutTimeColumn && (
+                      <td style={cellNumber}>{formatBreakoutTime(row.breakout_happened_at)}</td>
+                    )}
                     {mode === "history" && (
                       <>
                         <td style={cellNumber}>{row.score != null ? row.score.toFixed(1) : "-"}</td>

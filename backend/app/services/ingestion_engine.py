@@ -1,8 +1,9 @@
 import time
-from datetime import datetime, date
+from datetime import date
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.market_hours import is_regular_market_hours, ny_now
 from app.db.session import SessionLocal
 from app.models.instrument import Instrument
 from app.models.ticks import Tick
@@ -54,7 +55,7 @@ def ingest_tick(
         symbol=symbol,
         price=price,
         volume=volume,
-        timestamp=datetime.utcnow(),
+        timestamp=ny_now(),
         exchange=exchange
     )
 
@@ -71,13 +72,13 @@ def ingest_tick(
     if latest:
         latest.price = price
         latest.volume = volume
-        latest.timestamp = datetime.utcnow()
+        latest.timestamp = ny_now()
     else:
         latest = LatestTick(
             symbol=symbol,
             price=price,
             volume=volume,
-            timestamp=datetime.utcnow()
+            timestamp=ny_now()
         )
         db.add(latest)
 
@@ -99,7 +100,7 @@ def get_active_symbols():
 # 3. Build 1‑Minute Candle for a Symbol
 # ---------------------------------------------------------
 def build_intraday_candle(db: Session, symbol: str):
-    now = datetime.utcnow()
+    now = ny_now()
     minute_start = now.replace(second=0, microsecond=0)
 
     # Get ticks for this minute
@@ -120,7 +121,7 @@ def build_intraday_candle(db: Session, symbol: str):
 
     candle = IntradayCandle(
         symbol=symbol,
-        timestamp=minute_start,
+        timestamp=minute_start.replace(tzinfo=None),
         open=prices[0],
         high=max(prices),
         low=min(prices),
@@ -138,7 +139,7 @@ def build_intraday_candle(db: Session, symbol: str):
 # ---------------------------------------------------------
 def cleanup_intraday_retention():
     db = SessionLocal()
-    today = date.today()
+    today = ny_now().date()
 
     db.query(IntradayCandle).filter(
         func.date(IntradayCandle.timestamp) < today
@@ -172,15 +173,28 @@ def cleanup_intraday_retention():
 # ---------------------------------------------------------
 def candle_builder_loop():
     print("🕒 Candle builder started...")
+    waiting_for_market = False
 
     while True:
+        if not is_regular_market_hours():
+            if not waiting_for_market:
+                print("🕒 Candle builder paused outside regular market hours.")
+            waiting_for_market = True
+            time.sleep(30)
+            continue
+
+        if waiting_for_market:
+            print("🕒 Candle builder resumed for regular market hours.")
+            waiting_for_market = False
+
         db = SessionLocal()
+        try:
+            # Only use symbols YOU inserted
+            symbols = get_active_symbols()
 
-        # Only use symbols YOU inserted
-        symbols = get_active_symbols()
+            for sym in symbols:
+                build_intraday_candle(db, sym)
+        finally:
+            db.close()
 
-        for sym in symbols:
-            build_intraday_candle(db, sym)
-
-        db.close()
         time.sleep(60)  # run every minute

@@ -23,6 +23,7 @@ export default function DataLoader() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [symbolStatus, setSymbolStatus] = useState([]);
+  const [latestLiveCandles, setLatestLiveCandles] = useState([]);
   const [deleteMode, setDeleteMode] = useState("symbol-year");
   const [deleteSymbol, setDeleteSymbol] = useState("");
   const [deleteYear, setDeleteYear] = useState(new Date().getFullYear());
@@ -130,6 +131,22 @@ export default function DataLoader() {
     }
   };
 
+  const fetchLatestLiveCandles = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/latest-live-candles?limit=600`);
+      if (res.ok) {
+        const data = await parseJsonResponse(res);
+        setLatestLiveCandles(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error("Latest live candles fetch error:", err);
+    }
+  };
+
+  const refreshStatusViews = async () => {
+    await Promise.all([fetchSymbolStatus(), fetchLatestLiveCandles()]);
+  };
+
   const refreshLiveToday = async (e) => {
     e.preventDefault();
 
@@ -226,7 +243,7 @@ export default function DataLoader() {
 
   // Fetch status on mount
   useEffect(() => {
-    fetchSymbolStatus();
+    refreshStatusViews();
   }, []);
 
   return (
@@ -278,6 +295,21 @@ export default function DataLoader() {
           }}
         >
           Delete Data
+        </button>
+        <button
+          onClick={() => setActiveTab("live-extract")}
+          style={{
+            padding: "10px 20px",
+            marginLeft: "10px",
+            background: activeTab === "live-extract" ? "#20c997" : "#f0f0f0",
+            color: activeTab === "live-extract" ? "white" : "black",
+            border: "none",
+            borderRadius: "4px 4px 0 0",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          Live Extract
         </button>
       </div>
 
@@ -722,7 +754,7 @@ export default function DataLoader() {
           <h2>Symbol Load Status</h2>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
             <button
-              onClick={fetchSymbolStatus}
+              onClick={refreshStatusViews}
               style={{
                 marginBottom: "15px",
                 padding: "8px 16px",
@@ -835,6 +867,64 @@ export default function DataLoader() {
                 ))}
               </tbody>
             </table>
+          )}
+
+        </div>
+      )}
+
+      {/* Live Extract Tab */}
+      {activeTab === "live-extract" && (
+        <div style={{ padding: "20px", background: "#f9f9f9", borderRadius: "4px" }}>
+          <h2>Live Extract (SP500 Universe)</h2>
+          <p style={{ marginTop: 0, color: "#666" }}>
+            One row per symbol with the latest live refresh timestamp.
+          </p>
+
+          <button
+            onClick={refreshStatusViews}
+            style={{
+              marginBottom: "15px",
+              padding: "8px 16px",
+              background: "#20c997",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            🔄 Refresh Live Extract
+          </button>
+
+          {latestLiveCandles.length === 0 ? (
+            <p style={{ color: "#666" }}>No live timestamps found yet for today.</p>
+          ) : (
+            <div style={{ maxHeight: "520px", overflowY: "auto", border: "1px solid #e5e5e5", borderRadius: "6px" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  background: "white",
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#f5f5f5", borderBottom: "2px solid #ddd", position: "sticky", top: 0 }}>
+                    <th style={{ padding: "10px", textAlign: "left", fontWeight: "bold" }}>Symbol</th>
+                    <th style={{ padding: "10px", textAlign: "left", fontWeight: "bold" }}>Latest Refresh Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {latestLiveCandles.map((item) => (
+                    <tr key={item.symbol} style={{ borderBottom: "1px solid #eee" }}>
+                      <td style={{ padding: "10px", fontWeight: 700 }}>{item.symbol}</td>
+                      <td style={{ padding: "10px", fontSize: "0.9em", color: "#555" }}>
+                        {item.timestamp ? new Date(item.timestamp).toLocaleString() : "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

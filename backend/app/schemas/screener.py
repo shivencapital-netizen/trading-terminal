@@ -22,6 +22,9 @@ class ScreenerFilters(BaseModel):
 
     price_above_sma20: Optional[bool] = None
     price_above_sma50: Optional[bool] = None
+    price_above_n_day_high: Optional[bool] = None
+    n_day_high_lookback: Optional[int] = None
+    price_above_5d_high: Optional[bool] = None
     sma_bullish_crossover: Optional[bool] = None
     rsi_min: Optional[float] = None
     rsi_max: Optional[float] = None

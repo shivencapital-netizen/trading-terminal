@@ -1,18 +1,75 @@
-import { useEffect, useMemo, useState } from "react";
-import ScreenerSidebar from "../components/screener/ScreenerSidebar";
-import ScreenerResults from "../components/screener/ScreenerResults";
-import { Sparklines, SparklinesLine } from "react-sparklines";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ScreenerSidebarImport from "../components/screener/ScreenerSidebar";
+import ScreenerResultsImport from "../components/screener/ScreenerResults";
+
+const ScreenerSidebar = ScreenerSidebarImport?.default ?? ScreenerSidebarImport;
+const ScreenerResults = ScreenerResultsImport?.default ?? ScreenerResultsImport;
+
+const LIVE_REFRESH_INTERVAL_MS = 30000;
+const BREAKOUT_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+function getNewYorkClock(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+
+  return {
+    weekday: parts.weekday,
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+  };
+}
+
+function isRegularMarketHours(date = new Date()) {
+  const { weekday, hour, minute } = getNewYorkClock(date);
+  if (["Sat", "Sun"].includes(weekday)) {
+    return false;
+  }
+
+  const totalMinutes = hour * 60 + minute;
+  return totalMinutes >= 570 && totalMinutes < 960;
+}
+
+function formatUpdatedAtLabel(value) {
+  if (!value) {
+    return "Waiting for live bars";
+  }
+
+  const [day, time] = String(value).split("T");
+  if (!day || !time) {
+    return String(value);
+  }
+
+  return `${day} ${time.slice(0, 5)} ET`;
+}
 
 export default function Screener({ universeSymbols = null, universeMeta = {}, pageTitle = "Screener" }) {
+  const hasUniverse = Array.isArray(universeSymbols) && universeSymbols.length > 0;
   const [criteria, setCriteria] = useState({});
   const [results, setResults] = useState([]);
   const [mode, setMode] = useState("live");
   const [selectedSymbol, setSelectedSymbol] = useState(null);
+  const [breakoutEnabled, setBreakoutEnabled] = useState(false);
+  const [breakoutLookbackDays, setBreakoutLookbackDays] = useState(5);
+  const previousBreakoutSymbolsRef = useRef(null);
+  const previousBreakoutRunAtRef = useRef(null);
+  const [newBreakoutSymbols, setNewBreakoutSymbols] = useState(new Set());
   const [chartData, setChartData] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState(null);
-  const [sortField, setSortField] = useState("symbol");
+  const [sortField, setSortField] = useState(hasUniverse ? "qqq_rank" : "symbol");
   const [sortDirection, setSortDirection] = useState("asc");
+  const [isLiveMarketOpen, setIsLiveMarketOpen] = useState(() => isRegularMarketHours());
 
   const buildQueryParams = (filters) => {
     const params = new URLSearchParams();
@@ -25,6 +82,7 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
       params.set("min_volume", filters.min_volume);
     if (filters.price_above_sma20) params.set("price_above_sma20", "true");
     if (filters.price_above_sma50) params.set("price_above_sma50", "true");
+    if (filters.price_above_5d_high) params.set("price_above_5d_high", "true");
     if (filters.sma_bullish_crossover) params.set("sma_bullish_crossover", "true");
     if (filters.rsi_min !== undefined && filters.rsi_min !== null)
       params.set("rsi_min", filters.rsi_min);
@@ -46,7 +104,19 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
 
   const attachUniverseMeta = (data) => {
     if (!universeSymbols || !Array.isArray(data)) return data;
-    const rankMap = new Map(universeSymbols.map((symbol, index) => [symbol.toUpperCase(), index + 1]));
+    const rankedSymbols = [...universeSymbols].sort((left, right) => {
+      const leftSymbol = String(left).toUpperCase();
+      const rightSymbol = String(right).toUpperCase();
+      const leftWeight = universeMeta[leftSymbol] ?? Number.NEGATIVE_INFINITY;
+      const rightWeight = universeMeta[rightSymbol] ?? Number.NEGATIVE_INFINITY;
+
+      if (leftWeight !== rightWeight) {
+        return rightWeight - leftWeight;
+      }
+
+      return leftSymbol.localeCompare(rightSymbol);
+    });
+    const rankMap = new Map(rankedSymbols.map((symbol, index) => [symbol.toUpperCase(), index + 1]));
     return data.map((row) => {
       const sym = String(row.symbol || "").toUpperCase();
       return {
@@ -57,18 +127,64 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
     });
   };
 
-  const runScreener = async () => {
+  useEffect(() => {
+    setSortField(hasUniverse ? "qqq_rank" : "symbol");
+    setSortDirection("asc");
+  }, [hasUniverse]);
+
+  const runScreener = async ({ preserveSelection = false } = {}) => {
     try {
-      const url = "http://127.0.0.1:8000/api/v1/screener/run";
+      const query = buildQueryParams(criteria);
+      const url = `http://127.0.0.1:8000/api/v1/screener/run${query ? `?${query}` : ""}`;
       const res = await fetch(url);
       const data = await res.json();
       const filtered = filterUniverse(Array.isArray(data) ? data : []);
       setResults(attachUniverseMeta(filtered));
-      setSelectedSymbol(null);
-      setChartData([]);
+      if (!preserveSelection) {
+        setSelectedSymbol(null);
+        setChartData([]);
+      }
       setChartError(null);
     } catch (err) {
       console.error("Screener error:", err);
+      setResults([]);
+    }
+  };
+
+  const runBreakoutScan = async ({ preserveSelection = false } = {}) => {
+    try {
+      const days = Math.max(1, Math.min(120, Number(breakoutLookbackDays) || 5));
+      const url = `http://127.0.0.1:8000/api/v1/screener/breakouts?lookback_days=${days}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const filtered = filterUniverse(Array.isArray(data) ? data : []);
+
+      const currentSymbols = new Set(
+        filtered.map((row) => String(row.symbol || "").toUpperCase())
+      );
+      const previousSymbols = previousBreakoutSymbolsRef.current;
+      const currentRunAt = new Date();
+
+      if (previousSymbols) {
+        const added = new Set(
+          [...currentSymbols].filter((symbol) => !previousSymbols.has(symbol))
+        );
+        setNewBreakoutSymbols(added);
+      } else {
+        setNewBreakoutSymbols(new Set());
+      }
+
+      previousBreakoutSymbolsRef.current = currentSymbols;
+      previousBreakoutRunAtRef.current = currentRunAt;
+
+      setResults(attachUniverseMeta(filtered));
+      if (!preserveSelection) {
+        setSelectedSymbol(null);
+        setChartData([]);
+      }
+      setChartError(null);
+    } catch (err) {
+      console.error("Breakout screener error:", err);
       setResults([]);
     }
   };
@@ -93,14 +209,69 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
   };
 
   useEffect(() => {
-    if (universeSymbols) {
-      if (mode === "history") {
-        runHistoryScreener();
+    if (!breakoutEnabled) {
+      previousBreakoutSymbolsRef.current = null;
+      previousBreakoutRunAtRef.current = null;
+      setNewBreakoutSymbols(new Set());
+    }
+  }, [breakoutEnabled]);
+
+  useEffect(() => {
+    if (mode === "history") {
+      setIsLiveMarketOpen(false);
+      previousBreakoutSymbolsRef.current = null;
+      previousBreakoutRunAtRef.current = null;
+      setNewBreakoutSymbols(new Set());
+      runHistoryScreener();
+    } else {
+      setIsLiveMarketOpen(isRegularMarketHours());
+      if (breakoutEnabled) {
+        runBreakoutScan();
       } else {
         runScreener();
       }
     }
-  }, [universeSymbols, mode]);
+  }, [universeSymbols, mode, breakoutEnabled, breakoutLookbackDays]);
+
+  useEffect(() => {
+    if (mode !== "live" || breakoutEnabled) {
+      return;
+    }
+
+    runScreener({ preserveSelection: true });
+  }, [criteria, mode, breakoutEnabled]);
+
+  useEffect(() => {
+    if (mode !== "live" || !breakoutEnabled) {
+      return;
+    }
+
+    runBreakoutScan({ preserveSelection: true });
+  }, [mode, breakoutEnabled, breakoutLookbackDays]);
+
+  useEffect(() => {
+    if (mode !== "live") {
+      return undefined;
+    }
+
+    setIsLiveMarketOpen(isRegularMarketHours());
+
+    const intervalMs = breakoutEnabled ? BREAKOUT_REFRESH_INTERVAL_MS : LIVE_REFRESH_INTERVAL_MS;
+
+    const intervalId = window.setInterval(() => {
+      const marketOpen = isRegularMarketHours();
+      setIsLiveMarketOpen(marketOpen);
+      if (marketOpen) {
+        if (breakoutEnabled) {
+          runBreakoutScan({ preserveSelection: true });
+        } else {
+          runScreener({ preserveSelection: true });
+        }
+      }
+    }, intervalMs);
+
+    return () => window.clearInterval(intervalId);
+  }, [mode, universeSymbols, criteria, breakoutEnabled, breakoutLookbackDays]);
 
   const handleSelectSymbol = async (symbol) => {
     setSelectedSymbol(symbol);
@@ -127,6 +298,29 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
   };
 
   const handleRun = mode === "history" ? runHistoryScreener : runScreener;
+
+  const latestLiveUpdatedAt = useMemo(() => {
+    if (!results || results.length === 0) {
+      return null;
+    }
+
+    return results.reduce((latest, row) => {
+      const value = row.updated_at;
+      if (!value) {
+        return latest;
+      }
+      return !latest || value > latest ? value : latest;
+    }, null);
+  }, [results]);
+
+  const liveStatusText =
+    mode === "live"
+      ? `${
+          isLiveMarketOpen
+            ? "Alpaca live sync active"
+            : "Alpaca live sync paused outside 9:30 AM-4:00 PM ET"
+        } | ${breakoutEnabled ? `Breakout scan every 5m (${breakoutLookbackDays}d high), new this run: ${newBreakoutSymbols.size}` : "Live screener every 30s"} | Last bar: ${formatUpdatedAtLabel(latestLiveUpdatedAt)}`
+      : "History mode uses stored candles";
 
   const sortedResults = useMemo(() => {
     const withDiff = results.map((row) => {
@@ -355,6 +549,10 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
       <ScreenerSidebar
         mode={mode}
         setMode={setMode}
+        breakoutEnabled={breakoutEnabled}
+        setBreakoutEnabled={setBreakoutEnabled}
+        breakoutLookbackDays={breakoutLookbackDays}
+        setBreakoutLookbackDays={setBreakoutLookbackDays}
         criteria={criteria}
         setCriteria={setCriteria}
         runScreener={handleRun}
@@ -366,6 +564,10 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
             results={sortedResults}
             mode={mode}
             pageTitle={pageTitle}
+            liveStatusText={liveStatusText}
+            liveStatusActive={mode === "live" && isLiveMarketOpen}
+            breakoutEnabled={breakoutEnabled}
+            newBreakoutSymbols={newBreakoutSymbols}
             selectedSymbol={selectedSymbol}
             onRowClick={handleSelectSymbol}
             sortField={sortField}

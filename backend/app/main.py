@@ -23,6 +23,7 @@ import threading
 from app.services.realtime_engine import start_realtime_ingestion
 from app.services.ingestion_engine import candle_builder_loop
 from app.services.delayed_data import start_delayed_quote_polling
+from app.services.live_loader import start_live_recent_polling
 from app.services.summary_refresh import start_symbol_load_summary_refresher
 
 
@@ -67,6 +68,10 @@ async def startup_event():
     # Start 1-minute candle builder
     threading.Thread(target=candle_builder_loop, daemon=True).start()
     print("🕒 Candle builder loop started.")
+
+    # Start periodic Alpaca recent-bar polling for screener freshness
+    threading.Thread(target=start_live_recent_polling, daemon=True).start()
+    print("📈 Recent live bar polling thread started.")
 
     # Start free delayed-data polling (15-minute delayed IEX bars)
     threading.Thread(target=start_delayed_quote_polling, daemon=True).start()
