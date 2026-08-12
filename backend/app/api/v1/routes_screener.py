@@ -17,6 +17,12 @@ from app.services.ma_screener import (
     refresh_ma_crossover_cache,
     get_ma_crossover_cache,
 )
+from app.services.rsi_screener import (
+    run_rsi_crossover_screener,
+    clear_rsi_crossover_cache,
+    refresh_rsi_crossover_cache,
+    get_rsi_crossover_cache,
+)
 
 router = APIRouter()
 
@@ -161,6 +167,90 @@ def get_ma_crossover_cache_endpoint(
             direction=direction,
             symbol_contains=symbol_contains,
             ma_family=ma_family,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
+
+
+@router.get("/rsi-cross")
+def run_rsi_crossover_endpoint(
+    rsi_period: int = 14,
+    rsi_level: float = 59,
+    direction: str = "above",
+    symbol_contains: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Return symbols where RSI crossed a threshold on the latest trading day.
+    Example: rsi_period=14, rsi_level=59, direction=above
+    """
+    try:
+        return run_rsi_crossover_screener(
+            db,
+            rsi_period=rsi_period,
+            rsi_level=rsi_level,
+            direction=direction,
+            symbol_contains=symbol_contains,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
+
+
+@router.post("/rsi-cross/cache/refresh")
+def refresh_rsi_crossover_cache_endpoint(
+    rsi_period: int = 14,
+    rsi_level: float = 59,
+    direction: str = "above",
+    symbol_contains: str | None = None,
+    db: Session = Depends(get_db),
+):
+    try:
+        return refresh_rsi_crossover_cache(
+            db,
+            rsi_period=rsi_period,
+            rsi_level=rsi_level,
+            direction=direction,
+            symbol_contains=symbol_contains,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
+
+
+@router.post("/rsi-cross/cache/clear")
+def clear_rsi_crossover_cache_endpoint(
+    rsi_period: int = 14,
+    rsi_level: float = 59,
+    direction: str = "above",
+    symbol_contains: str | None = None,
+    db: Session = Depends(get_db),
+):
+    try:
+        return clear_rsi_crossover_cache(
+            db,
+            rsi_period=rsi_period,
+            rsi_level=rsi_level,
+            direction=direction,
+            symbol_contains=symbol_contains,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
+
+
+@router.get("/rsi-cross/cache")
+def get_rsi_crossover_cache_endpoint(
+    rsi_period: int = 14,
+    rsi_level: float = 59,
+    direction: str = "above",
+    symbol_contains: str | None = None,
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_rsi_crossover_cache(
+            db,
+            rsi_period=rsi_period,
+            rsi_level=rsi_level,
+            direction=direction,
+            symbol_contains=symbol_contains,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex))

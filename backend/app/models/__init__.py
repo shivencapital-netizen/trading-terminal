@@ -12,6 +12,7 @@ from app.models.ticks import Tick
 from app.models.history_screener import HistoryScreenerRun, HistoryScreenerResult
 from app.models.symbol_load_summary import SymbolLoadSummary
 from app.models.ma_signal_cache import MASignalCache
+from app.models.rsi_signal_cache import RSISignalCache
 
 # Shared consolidated models file (strategies, backtests, credentials, etc.)
 from app.models import models
@@ -31,4 +32,5 @@ __all__ = [
 	"HistoryScreenerResult",
 	"SymbolLoadSummary",
 	"MASignalCache",
+	"RSISignalCache",
 ]

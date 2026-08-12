@@ -2,6 +2,7 @@ import { useState } from "react";
 import Screener from "./pages/Screener";
 import DataLoader from "./pages/DataLoader";
 import MAScreener from "./pages/MAScreener";
+import RSIScreener from "./pages/RSIScreener";
 
 const QQQ_SYMBOLS = [
   "AAPL",
@@ -148,6 +149,27 @@ function App() {
         >
           📈 MA Screener
         </button>
+        <button
+          onClick={() => setCurrentPage("rsi")}
+          style={{
+            padding: "15px 20px",
+            background: currentPage === "rsi" ? "#007bff" : "#333",
+            color: "white",
+            border: "none",
+            cursor: "pointer",
+            fontSize: "16px",
+            fontWeight: "bold",
+            transition: "background 0.3s",
+          }}
+          onMouseOver={(e) =>
+            currentPage !== "rsi" && (e.target.style.background = "#555")
+          }
+          onMouseOut={(e) =>
+            currentPage !== "rsi" && (e.target.style.background = "#333")
+          }
+        >
+          📉 RSI Screener
+        </button>
       </div>
 
       {/* Page Content */}
@@ -162,6 +184,7 @@ function App() {
         )}
         {currentPage === "dataloader" && <DataLoader />}
         {currentPage === "ma" && <MAScreener />}
+        {currentPage === "rsi" && <RSIScreener />}
       </div>
     </div>
   );
