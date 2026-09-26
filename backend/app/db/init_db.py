@@ -11,6 +11,7 @@ from app.models.latest_candle_1m import LatestCandle1m
 from app.models.symbol_load_summary import SymbolLoadSummary
 from app.models.ma_signal_cache import MASignalCache
 from app.models.rsi_signal_cache import RSISignalCache
+from app.models.ath_signal_cache import ATHSignalCache
 from app.models.history_screener import HistoryScreenerRun, HistoryScreenerResult
 from app.models import models
 

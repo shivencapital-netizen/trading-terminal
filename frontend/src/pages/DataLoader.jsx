@@ -27,6 +27,7 @@ export default function DataLoader() {
   const [deleteMode, setDeleteMode] = useState("symbol-year");
   const [deleteSymbol, setDeleteSymbol] = useState("");
   const [deleteYear, setDeleteYear] = useState(new Date().getFullYear());
+  const [deleteBeforeDate, setDeleteBeforeDate] = useState("");
   const [refreshSymbol, setRefreshSymbol] = useState("");
 
   const runIncremental = async (e) => {
@@ -196,11 +197,17 @@ export default function DataLoader() {
       return;
     }
 
+    if (deleteMode === "before-date" && !deleteBeforeDate) {
+      setMessage("❌ Please select a date");
+      return;
+    }
+
     const confirmed = window.confirm(
       `⚠️ Are you sure you want to delete? This cannot be undone!\n\nMode: ${
         deleteMode === "all" ? "All symbols" :
         deleteMode === "all-years" ? "All years for one symbol" :
         deleteMode === "current-year" ? "Current year data" :
+        deleteMode === "before-date" ? `All symbols' data before ${deleteBeforeDate}` :
         "One symbol, one year"
       }`
     );
@@ -221,6 +228,8 @@ export default function DataLoader() {
         url += `?mode=current-year`;
       } else if (deleteMode === "symbol-year") {
         url += `?mode=symbol-year&symbol=${deleteSymbol.toUpperCase()}&year=${deleteYear}`;
+      } else if (deleteMode === "before-date") {
+        url += `?mode=before-date&before_date=${deleteBeforeDate}`;
       }
 
       const res = await fetch(url, { method: "POST" });
@@ -229,6 +238,7 @@ export default function DataLoader() {
       if (res.ok) {
         setMessage(`✅ Deleted ${data.deleted || 0} candles successfully`);
         setDeleteSymbol("");
+        setDeleteBeforeDate("");
         fetchSymbolStatus();
       } else {
         setMessage(`❌ Error: ${data.detail || "Failed to delete data"}`);
@@ -667,6 +677,16 @@ export default function DataLoader() {
                   />
                   All Symbols, All Years
                 </label>
+                <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    value="before-date"
+                    checked={deleteMode === "before-date"}
+                    onChange={(e) => setDeleteMode(e.target.value)}
+                    style={{ marginRight: "5px" }}
+                  />
+                  All Symbols - Before Date
+                </label>
               </div>
             </div>
 
@@ -706,6 +726,26 @@ export default function DataLoader() {
                     border: "1px solid #ccc",
                     borderRadius: "4px",
                     width: "100px",
+                  }}
+                />
+              </div>
+            )}
+
+            {deleteMode === "before-date" && (
+              <div>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                  Delete all data before
+                </label>
+                <input
+                  type="date"
+                  value={deleteBeforeDate}
+                  onChange={(e) => setDeleteBeforeDate(e.target.value)}
+                  max={new Date().toISOString().split("T")[0]}
+                  style={{
+                    padding: "8px",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                    width: "170px",
                   }}
                 />
               </div>

@@ -3,6 +3,7 @@ import Screener from "./pages/Screener";
 import DataLoader from "./pages/DataLoader";
 import MAScreener from "./pages/MAScreener";
 import RSIScreener from "./pages/RSIScreener";
+import ATHScreener from "./pages/ATHScreener";
 
 const QQQ_SYMBOLS = [
   "AAPL",
@@ -170,6 +171,27 @@ function App() {
         >
           📉 RSI Screener
         </button>
+        <button
+          onClick={() => setCurrentPage("ath")}
+          style={{
+            padding: "15px 20px",
+            background: currentPage === "ath" ? "#007bff" : "#333",
+            color: "white",
+            border: "none",
+            cursor: "pointer",
+            fontSize: "16px",
+            fontWeight: "bold",
+            transition: "background 0.3s",
+          }}
+          onMouseOver={(e) =>
+            currentPage !== "ath" && (e.target.style.background = "#555")
+          }
+          onMouseOut={(e) =>
+            currentPage !== "ath" && (e.target.style.background = "#333")
+          }
+        >
+          🏆 ATH Screener
+        </button>
       </div>
 
       {/* Page Content */}
@@ -185,6 +207,7 @@ function App() {
         {currentPage === "dataloader" && <DataLoader />}
         {currentPage === "ma" && <MAScreener />}
         {currentPage === "rsi" && <RSIScreener />}
+        {currentPage === "ath" && <ATHScreener />}
       </div>
     </div>
   );

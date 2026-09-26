@@ -314,6 +314,7 @@ def delete_history_1m_api(
     mode: str = "symbol-year",
     symbol: Optional[str] = None,
     year: Optional[int] = None,
+    before_date: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -322,6 +323,7 @@ def delete_history_1m_api(
     - mode=all-years: delete all years for a given symbol (requires symbol)
     - mode=current-year: delete current year data for all symbols
     - mode=symbol-year: delete a single symbol for a given year (requires symbol and year)
+    - mode=before-date: delete all symbols' data with start_time before the given date (requires before_date, format YYYY-MM-DD)
     Returns number of deleted rows.
     """
     query = db.query(Candle1m)
@@ -351,6 +353,16 @@ def delete_history_1m_api(
             Candle1m.start_time < end,
         ).delete(synchronize_session=False)
 
+    elif mode == "before-date":
+        if not before_date:
+            return {"detail": "before_date required for before-date mode"}
+        from datetime import datetime
+        try:
+            cutoff = datetime.strptime(before_date, "%Y-%m-%d")
+        except ValueError:
+            return {"detail": "before_date must be in YYYY-MM-DD format"}
+        deleted = query.filter(Candle1m.start_time < cutoff).delete(synchronize_session=False)
+
     else:
         return {"detail": "unknown mode"}
 
@@ -364,7 +376,7 @@ def delete_history_1m_api(
             instr.last_loaded_time = last
             db.add(instr)
 
-    if mode == "all":
+    if mode in ("all", "before-date"):
         # update all instruments and summary rows
         instruments = db.query(Instrument).all()
         for instr in instruments:

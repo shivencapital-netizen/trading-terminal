@@ -23,6 +23,12 @@ from app.services.rsi_screener import (
     refresh_rsi_crossover_cache,
     get_rsi_crossover_cache,
 )
+from app.services.ath_screener import (
+    run_ath_screener,
+    clear_ath_screener_cache,
+    refresh_ath_screener_cache,
+    get_ath_screener_cache,
+)
 
 router = APIRouter()
 
@@ -251,6 +257,78 @@ def get_rsi_crossover_cache_endpoint(
             rsi_level=rsi_level,
             direction=direction,
             symbol_contains=symbol_contains,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
+
+
+@router.get("/ath-cross")
+def run_ath_screener_endpoint(
+    direction: str = "above",
+    symbol_contains: str | None = None,
+    min_history_days: int = 30,
+    db: Session = Depends(get_db),
+):
+    try:
+        return run_ath_screener(
+            db,
+            direction=direction,
+            symbol_contains=symbol_contains,
+            min_history_days=min_history_days,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
+
+
+@router.post("/ath-cross/cache/refresh")
+def refresh_ath_screener_cache_endpoint(
+    direction: str = "above",
+    symbol_contains: str | None = None,
+    min_history_days: int = 30,
+    db: Session = Depends(get_db),
+):
+    try:
+        return refresh_ath_screener_cache(
+            db,
+            direction=direction,
+            symbol_contains=symbol_contains,
+            min_history_days=min_history_days,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
+
+
+@router.post("/ath-cross/cache/clear")
+def clear_ath_screener_cache_endpoint(
+    direction: str = "above",
+    symbol_contains: str | None = None,
+    min_history_days: int = 30,
+    db: Session = Depends(get_db),
+):
+    try:
+        return clear_ath_screener_cache(
+            db,
+            direction=direction,
+            symbol_contains=symbol_contains,
+            min_history_days=min_history_days,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
+
+
+@router.get("/ath-cross/cache")
+def get_ath_screener_cache_endpoint(
+    direction: str = "above",
+    symbol_contains: str | None = None,
+    min_history_days: int = 30,
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_ath_screener_cache(
+            db,
+            direction=direction,
+            symbol_contains=symbol_contains,
+            min_history_days=min_history_days,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex))
