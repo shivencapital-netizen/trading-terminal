@@ -5,6 +5,7 @@ import Admin from "./pages/Admin";
 import MAScreener from "./pages/MAScreener";
 import RSIScreener from "./pages/RSIScreener";
 import ATHScreener from "./pages/ATHScreener";
+import BacktestLab from "./pages/BacktestLab";
 
 const QQQ_SYMBOLS = [
   "AAPL",
@@ -216,6 +217,13 @@ function App() {
         >
           ⚙️ Admin
         </button>
+        <button
+          className={`app-nav__button${currentPage === "backtest" ? " app-nav__button--active" : ""}`}
+          onClick={() => setCurrentPage("backtest")}
+          type="button"
+        >
+          🧪 Backtest Lab
+        </button>
       </div>
 
       {/* Page Content */}
@@ -239,6 +247,7 @@ function App() {
         {currentPage === "rsi" && <RSIScreener />}
         {currentPage === "ath" && <ATHScreener />}
         {currentPage === "admin" && <Admin theme={theme} onThemeChange={setTheme} />}
+        {currentPage === "backtest" && <BacktestLab />}
       </div>
     </div>
   );

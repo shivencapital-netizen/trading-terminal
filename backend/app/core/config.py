@@ -14,6 +14,11 @@ ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "")
 # Optional: override the backend API base URL in frontend using REACT_APP_API_BASE.
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
+# OpenAI-compatible local model settings for Backtest Lab.
+AI_API_BASE_URL = os.getenv("AI_API_BASE_URL", "http://127.0.0.1:11434/v1").rstrip("/")
+AI_API_KEY = os.getenv("AI_API_KEY", "ollama")
+AI_MODEL = os.getenv("AI_MODEL", "qwen3:4b")
+
 
 def get_alpaca_credentials():
     """Return Alpaca credentials from the current environment or .env file."""
