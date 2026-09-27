@@ -27,6 +27,7 @@ function formatTimestamp(value) {
 
 function BacktestResult({ result }) {
   const [eventsFilter, setEventsFilter] = useState("all");
+  const hasThreshold = result.threshold_percent > 0;
   const periodName = result.timeframe === "week" ? "weeks" : "sessions";
   const expectedPeriods = result.expected_periods ?? (result.years || 2) * 240;
   const events = [
@@ -43,9 +44,9 @@ function BacktestResult({ result }) {
         <div>
           <p className="backtest-answer-label">ANALYSIS COMPLETE</p>
           <h2>
-            {result.symbol} had <strong>{result.positive_count}</strong> {periodName} above
-            {" "}+{result.threshold_percent}%, and <strong>{result.negative_count}</strong>
-            {" "}{periodName} below −{result.threshold_percent}%.
+            {result.symbol} had <strong>{result.positive_count}</strong> {periodName} with gains
+            {hasThreshold ? ` above +${result.threshold_percent}%` : ""}, and <strong>{result.negative_count}</strong>
+            {" "}{periodName} with losses{hasThreshold ? ` below −${result.threshold_percent}%` : ""}.
           </h2>
           <p>
             {result.analyzed_sessions.toLocaleString()} {periodName} analyzed ·{" "}
@@ -58,8 +59,8 @@ function BacktestResult({ result }) {
             {result.interpretation.lookback_trading_days
               ? `${result.interpretation.lookback_trading_days} trading days`
               : `${result.interpretation.years || result.years} ${(result.interpretation.years || result.years) === 1 ? "year" : "years"}`} ·{" "}
-            {result.interpretation.timeframe === "week" || result.timeframe === "week" ? "weekly" : "daily"} · ±
-            {result.interpretation.threshold_percent}%
+            {result.interpretation.timeframe === "week" || result.timeframe === "week" ? "weekly" : "daily"}
+            {hasThreshold ? ` · ±${result.interpretation.threshold_percent}%` : " · all gains/losses"}
           </p>
         </div>
       </div>
@@ -78,7 +79,7 @@ function BacktestResult({ result }) {
           </div>
           <strong className="backtest-metric-value backtest-text--up">{result.positive_count}</strong>
           <span className="backtest-metric-caption">
-            {result.timeframe === "week" ? "Weekly" : "Daily"} close-to-close gain &gt; +{result.threshold_percent}%
+            {result.timeframe === "week" ? "Weekly" : "Daily"} close-to-close gains{hasThreshold ? ` > +${result.threshold_percent}%` : ""}
           </span>
         </article>
         <article className="backtest-metric">
@@ -87,7 +88,7 @@ function BacktestResult({ result }) {
           </div>
           <strong className="backtest-metric-value backtest-text--down">{result.negative_count}</strong>
           <span className="backtest-metric-caption">
-            {result.timeframe === "week" ? "Weekly" : "Daily"} close-to-close loss &lt; −{result.threshold_percent}%
+            {result.timeframe === "week" ? "Weekly" : "Daily"} close-to-close losses{hasThreshold ? ` < −${result.threshold_percent}%` : ""}
           </span>
         </article>
         <article className="backtest-metric">
@@ -101,7 +102,7 @@ function BacktestResult({ result }) {
         <div className="backtest-events-header">
           <div>
             <h2>Move history</h2>
-            <p>Review every session that crossed the threshold.</p>
+            <p>{hasThreshold ? "Review every period that crossed the threshold." : "Review every gain and loss."}</p>
           </div>
           <div className="backtest-event-filters" role="group" aria-label="Filter move history">
             {[
@@ -146,7 +147,7 @@ function BacktestResult({ result }) {
             </table>
           </div>
         ) : (
-          <div className="backtest-empty">No sessions crossed this threshold in the selected period.</div>
+          <div className="backtest-empty">No gains or losses found in the selected period.</div>
         )}
       </article>
 

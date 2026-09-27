@@ -87,19 +87,21 @@ def parse_backtest_question(question: str) -> dict:
         "years": "integer from 1 to 20 when period is years, otherwise null",
         "lookback_trading_days": "integer from 1 to 10000 when specified, otherwise null",
         "timeframe": "day or week",
-        "threshold_percent": "positive number from 0 to 100",
+        "threshold_percent": "number from 0 to 100; use 0 when the user asks for all gains/losses without a threshold",
         "reason": "short explanation when unsupported",
     }
     system_prompt = (
         "Convert the user's market question into a backtest request. "
         "Do not write SQL, code, or a financial recommendation. "
         "Only support counting daily or weekly close-to-close percentage moves greater than "
-        "a positive threshold or less than the corresponding negative threshold, "
+        "a non-negative threshold or less than the corresponding negative threshold, "
         "for one symbol over a lookback in years or trading days. Weekly means one "
         "close on the last trading day of each week compared with the previous week's "
         "last trading day close. For example, 3% means strictly greater than +3% and "
-        "strictly less than -3%. If the user omits the lookback, use 2 years; if they "
-        "omit the threshold, use 3%; if they omit the timeframe, use day. Set "
+        "strictly less than -3%. If the user asks for gains/losses or moves without "
+        "a threshold, use 0% so every positive gain and negative loss is included. "
+        "If the user omits the lookback, use 2 years; if they omit the threshold, use 0%; "
+        "if they omit the timeframe, use day. Set "
         "supported=false for other analysis types or unclear symbols. Return one JSON "
         f"object matching this schema: {json.dumps(response_schema)}."
     )

@@ -14,6 +14,7 @@ from app.models.rsi_signal_cache import RSISignalCache
 from app.models.ath_signal_cache import ATHSignalCache
 from app.models.history_screener import HistoryScreenerRun, HistoryScreenerResult
 from app.models.backtest_conversation import BacktestConversation
+from app.models.intraday_rsi_monitor import IntradayRsiMonitor, IntradayRsiAlert
 from app.models import models
 
 def init_db():

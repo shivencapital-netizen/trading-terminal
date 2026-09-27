@@ -12,6 +12,7 @@ from app.api.v1 import (
     routes_admin,
     routes_charts,
     routes_instruments,
+    routes_intraday_rsi,
 )
 from app.api.v1 import routes_quotes
 
@@ -25,6 +26,7 @@ from app.services.ingestion_engine import candle_builder_loop
 from app.services.delayed_data import start_delayed_quote_polling
 from app.services.live_loader import start_live_recent_polling
 from app.services.summary_refresh import start_symbol_load_summary_refresher
+from app.services.intraday_rsi_monitor import start_intraday_rsi_monitoring
 
 
 app = FastAPI(
@@ -52,6 +54,7 @@ app.include_router(routes_admin.router, prefix="/api/v1/admin", tags=["Admin"])
 app.include_router(routes_charts.router, prefix="/api/v1/charts", tags=["Charts"])
 app.include_router(routes_instruments.router, prefix="/api/v1/instruments", tags=["Instruments"])
 app.include_router(routes_quotes.router, prefix="/api/v1/quotes", tags=["Delayed Quotes"])
+app.include_router(routes_intraday_rsi.router, prefix="/api/v1/admin/intraday-rsi", tags=["Intraday RSI"])
 
 
 @app.on_event("startup")
@@ -80,6 +83,10 @@ async def startup_event():
     # Start periodic symbol load summary refresher
     threading.Thread(target=start_symbol_load_summary_refresher, daemon=True).start()
     print("⏱️  Symbol load summary refresher thread started.")
+
+    # Start configurable intraday RSI crossover monitoring
+    threading.Thread(target=start_intraday_rsi_monitoring, daemon=True).start()
+    print("📣 Intraday RSI monitor thread started.")
 
 
 @app.get("/")

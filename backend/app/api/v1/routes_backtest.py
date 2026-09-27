@@ -27,7 +27,7 @@ class CloseMoveRequest(BaseModel):
     years: int | None = Field(default=None, ge=1, le=20)
     lookback_trading_days: int | None = Field(default=None, ge=1, le=10000)
     timeframe: Literal["day", "week"] = "day"
-    threshold_percent: float = Field(gt=0, le=100)
+    threshold_percent: float = Field(ge=0, le=100)
 
     @model_validator(mode="after")
     def validate_lookback(self):
@@ -293,6 +293,6 @@ def analyze_close_moves(request: CloseMoveRequest, db: Session = Depends(get_db)
             )
             + "Closes use the last stored 1-minute bar during the 9:30 AM–4:00 PM "
             "America/New_York session. The current incomplete session is excluded. "
-            "Threshold comparisons are strict."
+            "Threshold comparisons are strict; a 0% threshold includes every positive gain and negative loss."
         ),
     }
