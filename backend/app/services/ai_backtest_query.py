@@ -1,8 +1,9 @@
 import json
+import re
 
 import requests
 
-from app.core.config import AI_API_BASE_URL, AI_API_KEY, AI_MODEL
+from app.core.config import AI_API_BASE_URL, AI_MODEL
 
 
 class AIProviderNotConfigured(Exception):
@@ -76,38 +77,48 @@ def parse_backtest_question(question: str) -> dict:
     if not is_ai_provider_configured():
         raise AIProviderNotConfigured
 
+    simple_interpretation = _parse_simple_backtest_question(question)
+    if simple_interpretation:
+        return simple_interpretation
+
     response_schema = {
         "supported": "boolean",
         "symbol": "ticker symbol",
-        "years": "integer from 1 to 20",
+        "years": "integer from 1 to 20 when period is years, otherwise null",
+        "lookback_trading_days": "integer from 1 to 10000 when specified, otherwise null",
+        "timeframe": "day or week",
         "threshold_percent": "positive number from 0 to 100",
         "reason": "short explanation when unsupported",
     }
     system_prompt = (
         "Convert the user's market question into a backtest request. "
         "Do not write SQL, code, or a financial recommendation. "
-        "Only support counting daily close-to-close percentage moves greater than "
+        "Only support counting daily or weekly close-to-close percentage moves greater than "
         "a positive threshold or less than the corresponding negative threshold, "
-        "for one symbol over a lookback in years. For example, 3% means strictly "
-        "greater than +3% and strictly less than -3%. If the user omits the lookback, "
-        "use 2 years; if they omit the threshold, use 3%. Set supported=false for "
-        "other analysis types or unclear symbols. Return one JSON object matching "
-        f"this schema: {json.dumps(response_schema)}."
+        "for one symbol over a lookback in years or trading days. Weekly means one "
+        "close on the last trading day of each week compared with the previous week's "
+        "last trading day close. For example, 3% means strictly greater than +3% and "
+        "strictly less than -3%. If the user omits the lookback, use 2 years; if they "
+        "omit the threshold, use 3%; if they omit the timeframe, use day. Set "
+        "supported=false for other analysis types or unclear symbols. Return one JSON "
+        f"object matching this schema: {json.dumps(response_schema)}."
     )
+    ollama_url = AI_API_BASE_URL.removesuffix("/v1")
     try:
         response = requests.post(
-            f"{AI_API_BASE_URL}/chat/completions",
-            headers={"Authorization": f"Bearer {AI_API_KEY}"},
+            f"{ollama_url}/api/chat",
             json={
                 "model": AI_MODEL,
-                "temperature": 0,
-                "response_format": {"type": "json_object"},
+                "stream": False,
+                "think": False,
+                "format": "json",
+                "options": {"temperature": 0, "num_predict": 128},
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": question},
                 ],
             },
-            timeout=(5, 180),
+            timeout=(5, 90),
         )
         response.raise_for_status()
     except requests.Timeout as error:
@@ -119,7 +130,7 @@ def parse_backtest_question(question: str) -> dict:
 
     try:
         response_body = response.json()
-        content = response_body["choices"][0]["message"]["content"]
+        content = response_body["message"]["content"]
         parsed = json.loads(content)
     except (ValueError, KeyError, IndexError, TypeError) as error:
         raise AIResponseInvalid("Ollama returned an invalid response.") from error
@@ -127,3 +138,38 @@ def parse_backtest_question(question: str) -> dict:
     if not isinstance(parsed, dict):
         raise AIResponseInvalid("Ollama returned an invalid response.")
     return parsed
+
+
+def _parse_simple_backtest_question(question: str) -> dict | None:
+    ticker_match = re.search(
+        r"\b([A-Z][A-Z0-9.-]{0,14})\s+(?=(?:closed?|moves?|moved|returns?|gained|fell|dropped)\b)",
+        question,
+    )
+    threshold_match = re.search(r"(\d+(?:\.\d+)?)\s*%", question)
+    trading_days_match = re.search(r"\b(\d+)\s+trading\s+days?\b", question, re.IGNORECASE)
+    years_match = re.search(r"\blast\s+(\d+)\s+years?\b", question, re.IGNORECASE)
+    week_match = re.search(r"\b(?:weekly|weeks?|per\s+week)\b", question, re.IGNORECASE)
+
+    if not ticker_match or not threshold_match:
+        return None
+    if not trading_days_match and not years_match:
+        return None
+
+    lookback_trading_days = int(trading_days_match.group(1)) if trading_days_match else None
+    years = int(years_match.group(1)) if years_match else None
+    if (lookback_trading_days is not None and not 1 <= lookback_trading_days <= 10000) or (
+        years is not None and not 1 <= years <= 20
+    ):
+        return None
+    threshold = float(threshold_match.group(1))
+    if not 0 < threshold <= 100:
+        return None
+
+    return {
+        "supported": True,
+        "symbol": ticker_match.group(1),
+        "years": years,
+        "lookback_trading_days": lookback_trading_days,
+        "timeframe": "week" if week_match else "day",
+        "threshold_percent": threshold,
+    }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 const API_BASE = process.env.REACT_APP_API_BASE || "http://127.0.0.1:8000";
 const EXAMPLES = [
   "How many times did QQQ close more than 3% up or more than 3% down in the last 2 years?",
+  "How many weeks in the last 3 years did QQQ close above or below 2% from the previous week's last trading day close?",
   "Count days when NVDA moved over 5% in the last 1 year",
   "Show SPY moves greater than 2% over the last 5 years",
 ];
@@ -26,6 +27,8 @@ function formatTimestamp(value) {
 
 function BacktestResult({ result }) {
   const [eventsFilter, setEventsFilter] = useState("all");
+  const periodName = result.timeframe === "week" ? "weeks" : "sessions";
+  const expectedPeriods = result.expected_periods ?? (result.years || 2) * 240;
   const events = [
     ...result.positive_events.map((event) => ({ ...event, direction: "up" })),
     ...result.negative_events.map((event) => ({ ...event, direction: "down" })),
@@ -40,50 +43,57 @@ function BacktestResult({ result }) {
         <div>
           <p className="backtest-answer-label">ANALYSIS COMPLETE</p>
           <h2>
-            {result.symbol} closed above +{result.threshold_percent}% on{" "}
-            <strong>{result.positive_count}</strong> days, and below −{result.threshold_percent}%
-            {" "}on <strong>{result.negative_count}</strong> days.
+            {result.symbol} had <strong>{result.positive_count}</strong> {periodName} above
+            {" "}+{result.threshold_percent}%, and <strong>{result.negative_count}</strong>
+            {" "}{periodName} below −{result.threshold_percent}%.
           </h2>
           <p>
-            {result.analyzed_sessions.toLocaleString()} daily sessions analyzed ·{" "}
+            {result.analyzed_sessions.toLocaleString()} {periodName} analyzed ·{" "}
             {result.data_start_date && result.data_end_date
               ? `${formatDate(result.data_start_date)} – ${formatDate(result.data_end_date)} data coverage (requested ${formatDate(result.start_date)} – ${formatDate(result.end_date)})`
-              : "No sessions available in this range"}
+              : `No ${periodName} available in this range`}
           </p>
           <p>
-            Interpreted as {result.interpretation.symbol} · {result.interpretation.years}{" "}
-            {result.interpretation.years === 1 ? "year" : "years"} · ±
+            Interpreted as {result.interpretation.symbol} ·{" "}
+            {result.interpretation.lookback_trading_days
+              ? `${result.interpretation.lookback_trading_days} trading days`
+              : `${result.interpretation.years || result.years} ${(result.interpretation.years || result.years) === 1 ? "year" : "years"}`} ·{" "}
+            {result.interpretation.timeframe === "week" || result.timeframe === "week" ? "weekly" : "daily"} · ±
             {result.interpretation.threshold_percent}%
           </p>
         </div>
       </div>
 
-      {result.analyzed_sessions < result.years * 240 && (
+      {result.analyzed_sessions < expectedPeriods * 0.8 && (
         <div className="backtest-coverage-warning" role="status">
-          Limited history: only {result.analyzed_sessions.toLocaleString()} sessions are available
-          {" "}for this query, so the result does not cover the full {result.years}-year period.
+      Limited history: only {result.analyzed_sessions.toLocaleString()} {periodName} are available
+          {" "}for this query, so the result may not cover the full requested period.
         </div>
       )}
 
       <div className="backtest-metrics">
         <article className="backtest-metric">
-          <div className="backtest-metric-label"><span className="backtest-dot backtest-dot--up" /> LARGE UP DAYS</div>
+          <div className="backtest-metric-label">
+            <span className="backtest-dot backtest-dot--up" /> LARGE UP {result.timeframe === "week" ? "WEEKS" : "DAYS"}
+          </div>
           <strong className="backtest-metric-value backtest-text--up">{result.positive_count}</strong>
           <span className="backtest-metric-caption">
-            Daily close-to-close gain &gt; +{result.threshold_percent}%
+            {result.timeframe === "week" ? "Weekly" : "Daily"} close-to-close gain &gt; +{result.threshold_percent}%
           </span>
         </article>
         <article className="backtest-metric">
-          <div className="backtest-metric-label"><span className="backtest-dot backtest-dot--down" /> LARGE DOWN DAYS</div>
+          <div className="backtest-metric-label">
+            <span className="backtest-dot backtest-dot--down" /> LARGE DOWN {result.timeframe === "week" ? "WEEKS" : "DAYS"}
+          </div>
           <strong className="backtest-metric-value backtest-text--down">{result.negative_count}</strong>
           <span className="backtest-metric-caption">
-            Daily close-to-close loss &lt; −{result.threshold_percent}%
+            {result.timeframe === "week" ? "Weekly" : "Daily"} close-to-close loss &lt; −{result.threshold_percent}%
           </span>
         </article>
         <article className="backtest-metric">
-          <div className="backtest-metric-label">SESSIONS TESTED</div>
+          <div className="backtest-metric-label">{result.timeframe === "week" ? "WEEKS TESTED" : "SESSIONS TESTED"}</div>
           <strong className="backtest-metric-value">{result.analyzed_sessions.toLocaleString()}</strong>
-          <span className="backtest-metric-caption">With a prior session close</span>
+          <span className="backtest-metric-caption">With a prior {result.timeframe || "day"} close</span>
         </article>
       </div>
 
@@ -304,7 +314,7 @@ function BacktestLab() {
               <div className="backtest-assistant-mark" aria-hidden="true">✳</div>
               <div>
                 <h2 id="backtest-query-title">Ask a question</h2>
-                <p>Describe the daily move you want to test.</p>
+                <p>Describe the daily or weekly move you want to test.</p>
               </div>
             </div>
             <form
@@ -361,7 +371,9 @@ function BacktestLab() {
                   >
                     <span className="backtest-history-question">{item.question}</span>
                     <span className="backtest-history-meta">
-                      {item.symbol} · +{item.positive_count} / −{item.negative_count} · {formatTimestamp(item.created_at)}
+                      {item.symbol} · {item.timeframe === "week" ? "Weekly" : "Daily"}
+                      {" · "}{item.period_label || `${item.years} years`}
+                      {" · "}+{item.positive_count} / −{item.negative_count} · {formatTimestamp(item.created_at)}
                     </span>
                   </button>
                 ))}
@@ -376,7 +388,11 @@ function BacktestLab() {
           <div className="backtest-conversation-header">
             <div>
               <p className="backtest-eyebrow">ANALYSIS</p>
-              <h2>{result ? `${result.symbol} daily move analysis` : "Your results appear here"}</h2>
+              <h2>
+                {result
+                  ? `${result.symbol} ${result.timeframe === "week" ? "weekly" : "daily"} move analysis`
+                  : "Your results appear here"}
+              </h2>
             </div>
             {result?.created_at && (
               <span className="backtest-conversation-date">{formatTimestamp(result.created_at)}</span>
