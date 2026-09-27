@@ -4,6 +4,8 @@ import { Sparklines, SparklinesLine } from "react-sparklines";
 export default function ScreenerResults({
   results,
   mode,
+  loading = false,
+  error = "",
   pageTitle,
   liveStatusText,
   liveStatusActive = false,
@@ -44,6 +46,7 @@ export default function ScreenerResults({
 
   return (
     <div
+      className="screener-results"
       style={{
         flex: 1,
         display: "flex",
@@ -194,7 +197,13 @@ export default function ScreenerResults({
                       fontStyle: "italic",
                     }}
                   >
-                    No results yet - run the screener.
+                    {loading
+                      ? "Loading screener data..."
+                      : error
+                        ? `Unable to load results: ${error}`
+                        : results.length === 0
+                          ? "No matching data found. Check your filters or load historical data."
+                          : ""}
                   </td>
                 </tr>
               )}

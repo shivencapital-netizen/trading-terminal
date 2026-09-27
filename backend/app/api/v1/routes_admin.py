@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+import re
 from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from alpaca.common.exceptions import APIError
 
@@ -27,6 +30,65 @@ router = APIRouter()
 @router.get("/test")
 def test_admin():
     return {"message": "Admin router working"}
+
+
+@router.get("/instruments")
+def list_instruments(db: Session = Depends(get_db)):
+    instruments = db.query(Instrument).order_by(Instrument.symbol).all()
+    return [
+        {
+            "symbol": instrument.symbol,
+            "name": instrument.name,
+            "exchange": instrument.exchange,
+        }
+        for instrument in instruments
+    ]
+
+
+@router.post("/instruments", status_code=201)
+def add_instrument(symbol: str, db: Session = Depends(get_db)):
+    normalized_symbol = symbol.strip().upper()
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,14}", normalized_symbol):
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a valid symbol using up to 15 letters, numbers, dots, or hyphens.",
+        )
+
+    if db.query(Instrument).filter(Instrument.symbol == normalized_symbol).first():
+        raise HTTPException(status_code=409, detail=f"{normalized_symbol} is already in the instrument list.")
+
+    instrument = Instrument(symbol=normalized_symbol)
+    db.add(instrument)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"{normalized_symbol} is already in the instrument list.")
+    db.refresh(instrument)
+    return {
+        "symbol": instrument.symbol,
+        "name": instrument.name,
+        "exchange": instrument.exchange,
+    }
+
+
+@router.delete("/instruments/{symbol}")
+def remove_instrument(symbol: str, db: Session = Depends(get_db)):
+    normalized_symbol = symbol.strip().upper()
+    instrument = db.query(Instrument).filter(Instrument.symbol == normalized_symbol).one_or_none()
+    if instrument is None:
+        raise HTTPException(status_code=404, detail=f"{normalized_symbol} was not found in the instrument list.")
+
+    db.delete(instrument)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This instrument is referenced by existing records and cannot be removed.",
+        )
+    return {"symbol": normalized_symbol, "removed": True}
 
 
 # ---------------------------------------------------------
@@ -420,4 +482,3 @@ def delete_history_1m_api(
     db.commit()
 
     return {"deleted": deleted}
-

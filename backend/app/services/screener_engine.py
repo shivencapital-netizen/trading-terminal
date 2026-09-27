@@ -102,7 +102,11 @@ def get_previous_n_day_highs_bulk(db: Session, symbols: list[str], session_date:
     return {row[0]: float(row[1]) for row in rows if row[1] is not None}
 
 
-def run_screener(db: Session, filters: Optional[ScreenerFilters] = None):
+def run_screener(
+    db: Session,
+    filters: Optional[ScreenerFilters] = None,
+    symbols: Optional[list[str]] = None,
+):
     """
     Computes screener metrics for all symbols that have:
     - a latest tick
@@ -113,15 +117,18 @@ def run_screener(db: Session, filters: Optional[ScreenerFilters] = None):
     today = now.date()
 
     # Use today's intraday coverage as the source of truth for the live screener.
+    live_symbols_query = (
+        db.query(IntradayCandle.symbol)
+        .filter(func.date(IntradayCandle.timestamp) == today)
+        .filter(IntradayCandle.timestamp <= now)
+    )
+    if symbols:
+        live_symbols_query = live_symbols_query.filter(
+            IntradayCandle.symbol.in_([symbol.upper() for symbol in symbols])
+        )
     live_symbols = [
         row[0]
-        for row in (
-            db.query(IntradayCandle.symbol)
-            .filter(func.date(IntradayCandle.timestamp) == today)
-            .filter(IntradayCandle.timestamp <= now)
-            .distinct()
-            .all()
-        )
+        for row in live_symbols_query.distinct().all()
         if row and row[0]
     ]
     results = []
@@ -370,7 +377,11 @@ def is_rsi_bullish_divergence(closes, lookback=10):
     return closes[0] < closes[lookback] and latest_rsi > previous_rsi
 
 
-def run_history_screener(db: Session, filters: Optional[ScreenerFilters] = None):
+def run_history_screener(
+    db: Session,
+    filters: Optional[ScreenerFilters] = None,
+    symbols: Optional[list[str]] = None,
+):
     """
     Computes screener metrics from the history candles_1m table.
     """
@@ -383,6 +394,10 @@ def run_history_screener(db: Session, filters: Optional[ScreenerFilters] = None)
 
     if filters is not None and filters.symbol:
         query = query.filter(LatestCandle1m.symbol.ilike(f"%{filters.symbol}%"))
+    if symbols:
+        query = query.filter(
+            LatestCandle1m.symbol.in_([symbol.upper() for symbol in symbols])
+        )
 
     results = []
     latest_rows = query.order_by(LatestCandle1m.symbol).all()

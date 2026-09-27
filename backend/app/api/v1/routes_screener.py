@@ -5,7 +5,9 @@ Screener API routes.
 Provides a GET endpoint that returns computed screener metrics.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -36,6 +38,7 @@ router = APIRouter()
 @router.get("/run")
 def run_screener_endpoint(
     filters: ScreenerFilters = Depends(),
+    symbols: Optional[list[str]] = Query(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -43,19 +46,20 @@ def run_screener_endpoint(
     - a latest tick
     - intraday candles for today
     """
-    results = run_screener(db, filters=filters)
+    results = run_screener(db, filters=filters, symbols=symbols)
     return results
 
 
 @router.get("/history")
 def run_history_screener_endpoint(
     filters: ScreenerFilters = Depends(),
+    symbols: Optional[list[str]] = Query(None),
     db: Session = Depends(get_db),
 ):
     """
     Returns screener metrics based on historical candles in candles_1m.
     """
-    results = run_history_screener(db, filters=filters)
+    results = run_history_screener(db, filters=filters, symbols=symbols)
     return results
 
 

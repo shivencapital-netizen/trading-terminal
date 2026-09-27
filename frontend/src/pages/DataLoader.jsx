@@ -29,6 +29,8 @@ export default function DataLoader() {
   const [deleteYear, setDeleteYear] = useState(new Date().getFullYear());
   const [deleteBeforeDate, setDeleteBeforeDate] = useState("");
   const [refreshSymbol, setRefreshSymbol] = useState("");
+  const [instrumentSymbol, setInstrumentSymbol] = useState("");
+  const [instruments, setInstruments] = useState([]);
 
   const runIncremental = async (e) => {
     e.preventDefault();
@@ -146,6 +148,83 @@ export default function DataLoader() {
 
   const refreshStatusViews = async () => {
     await Promise.all([fetchSymbolStatus(), fetchLatestLiveCandles()]);
+  };
+
+  const fetchInstruments = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/instruments`);
+      const data = await parseJsonResponse(res);
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to load instruments");
+      }
+      setInstruments(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Instrument list error:", err);
+      setMessage(`❌ Error: ${err.message}`);
+    }
+  };
+
+  const addInstrument = async (e) => {
+    e.preventDefault();
+    const symbol = instrumentSymbol.trim().toUpperCase();
+    if (!symbol) {
+      setMessage("❌ Please enter a symbol");
+      return;
+    }
+
+    setLoading(true);
+    setMessage("⏳ Adding instrument...");
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/v1/admin/instruments?symbol=${encodeURIComponent(symbol)}`,
+        { method: "POST" }
+      );
+      const data = await parseJsonResponse(res);
+      if (!res.ok) {
+        setMessage(`❌ Error: ${data.detail || "Failed to add instrument"}`);
+        return;
+      }
+
+      setInstrumentSymbol("");
+      setMessage(`✅ Added ${data.symbol} to the instrument list`);
+      await fetchInstruments();
+      await fetchSymbolStatus();
+    } catch (err) {
+      console.error("Add instrument error:", err);
+      setMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const removeInstrument = async (symbol) => {
+    const confirmed = window.confirm(
+      `Remove ${symbol} from the instrument list? Its historical candle data will be kept.`
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    setMessage(`⏳ Removing ${symbol}...`);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/v1/admin/instruments/${encodeURIComponent(symbol)}`,
+        { method: "DELETE" }
+      );
+      const data = await parseJsonResponse(res);
+      if (!res.ok) {
+        setMessage(`❌ Error: ${data.detail || "Failed to remove instrument"}`);
+        return;
+      }
+
+      setMessage(`✅ Removed ${symbol} from the instrument list`);
+      await fetchInstruments();
+      await fetchSymbolStatus();
+    } catch (err) {
+      console.error("Remove instrument error:", err);
+      setMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const refreshLiveToday = async (e) => {
@@ -291,6 +370,24 @@ export default function DataLoader() {
           }}
         >
           Load Status
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab("instruments");
+            fetchInstruments();
+          }}
+          style={{
+            padding: "10px 20px",
+            marginRight: "10px",
+            background: activeTab === "instruments" ? "#007bff" : "#f0f0f0",
+            color: activeTab === "instruments" ? "white" : "black",
+            border: "none",
+            borderRadius: "4px 4px 0 0",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          Manage Instruments
         </button>
         <button
           onClick={() => setActiveTab("delete")}
@@ -622,6 +719,136 @@ export default function DataLoader() {
               }}
             >
               {message}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "instruments" && (
+        <div style={{ padding: "20px", background: "#f9f9f9", borderRadius: "4px" }}>
+          <h2>Manage Instruments</h2>
+          <p>Add symbols to or remove them from the backend instrument list. Removing a symbol keeps its historical candle data.</p>
+
+          <form onSubmit={addInstrument} style={{ display: "flex", alignItems: "flex-end", gap: "10px", flexWrap: "wrap" }}>
+            <div>
+              <label htmlFor="new-instrument-symbol" style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                Symbol
+              </label>
+              <input
+                id="new-instrument-symbol"
+                type="text"
+                value={instrumentSymbol}
+                onChange={(e) => setInstrumentSymbol(e.target.value.toUpperCase())}
+                placeholder="e.g., AAPL"
+                maxLength={15}
+                required
+                style={{
+                  padding: "8px",
+                  border: "1px solid #ccc",
+                  borderRadius: "4px",
+                  width: "150px",
+                }}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                padding: "9px 18px",
+                background: loading ? "#999" : "#28a745",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: loading ? "not-allowed" : "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              {loading ? "Working..." : "Add Symbol"}
+            </button>
+            <button
+              type="button"
+              onClick={fetchInstruments}
+              disabled={loading}
+              style={{
+                padding: "9px 18px",
+                background: "#6c757d",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: loading ? "not-allowed" : "pointer",
+              }}
+            >
+              Refresh List
+            </button>
+          </form>
+
+          {message && (
+            <div
+              role="status"
+              style={{
+                marginTop: "15px",
+                padding: "10px",
+                background: message.includes("✅") ? "#d4edda" : message.includes("⏳") ? "#e2e3e5" : "#f8d7da",
+                color: message.includes("✅") ? "#155724" : "#721c24",
+                border: "1px solid",
+                borderRadius: "4px",
+              }}
+            >
+              {message}
+            </div>
+          )}
+
+          <h3 style={{ marginTop: "25px" }}>Instrument List ({instruments.length})</h3>
+          {instruments.length === 0 ? (
+            <p>No instruments found. Add a symbol above.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", background: "white" }}>
+                <thead>
+                  <tr>
+                    {["Symbol", "Name", "Exchange", "Action"].map((heading) => (
+                      <th
+                        key={heading}
+                        style={{ padding: "10px", borderBottom: "2px solid #ddd", textAlign: "left" }}
+                      >
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {instruments.map((instrument) => (
+                    <tr key={instrument.symbol}>
+                      <td style={{ padding: "10px", borderBottom: "1px solid #eee", fontWeight: "bold" }}>
+                        {instrument.symbol}
+                      </td>
+                      <td style={{ padding: "10px", borderBottom: "1px solid #eee" }}>
+                        {instrument.name || "—"}
+                      </td>
+                      <td style={{ padding: "10px", borderBottom: "1px solid #eee" }}>
+                        {instrument.exchange || "—"}
+                      </td>
+                      <td style={{ padding: "10px", borderBottom: "1px solid #eee" }}>
+                        <button
+                          type="button"
+                          onClick={() => removeInstrument(instrument.symbol)}
+                          disabled={loading}
+                          style={{
+                            padding: "6px 12px",
+                            background: loading ? "#999" : "#dc3545",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px",
+                            cursor: loading ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import ScreenerSidebarImport from "../components/screener/ScreenerSidebar";
 import ScreenerResultsImport from "../components/screener/ScreenerResults";
 
-const ScreenerSidebar = ScreenerSidebarImport?.default ?? ScreenerSidebarImport;
 const ScreenerResults = ScreenerResultsImport?.default ?? ScreenerResultsImport;
 
 const LIVE_REFRESH_INTERVAL_MS = 30000;
@@ -53,11 +51,17 @@ function formatUpdatedAtLabel(value) {
   return `${day} ${time.slice(0, 5)} ET`;
 }
 
-export default function Screener({ universeSymbols = null, universeMeta = {}, pageTitle = "Screener" }) {
+export default function Screener({
+  fixedMode = "history",
+  universeSymbols = null,
+  universeMeta = {},
+  pageTitle = "Screener",
+}) {
   const hasUniverse = Array.isArray(universeSymbols) && universeSymbols.length > 0;
-  const [criteria, setCriteria] = useState({});
   const [results, setResults] = useState([]);
-  const [mode, setMode] = useState("live");
+  const [screenerLoading, setScreenerLoading] = useState(false);
+  const [screenerError, setScreenerError] = useState("");
+  const mode = fixedMode;
   const [selectedSymbol, setSelectedSymbol] = useState(null);
   const [breakoutEnabled, setBreakoutEnabled] = useState(false);
   const [breakoutLookbackDays, setBreakoutLookbackDays] = useState(5);
@@ -71,28 +75,11 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
   const [sortDirection, setSortDirection] = useState("asc");
   const [isLiveMarketOpen, setIsLiveMarketOpen] = useState(() => isRegularMarketHours());
 
-  const buildQueryParams = (filters) => {
+  const buildQueryParams = () => {
     const params = new URLSearchParams();
-    if (filters.symbol) params.set("symbol", filters.symbol);
-    if (filters.min_price !== undefined && filters.min_price !== null)
-      params.set("min_price", filters.min_price);
-    if (filters.max_price !== undefined && filters.max_price !== null)
-      params.set("max_price", filters.max_price);
-    if (filters.min_volume !== undefined && filters.min_volume !== null)
-      params.set("min_volume", filters.min_volume);
-    if (filters.price_above_sma20) params.set("price_above_sma20", "true");
-    if (filters.price_above_sma50) params.set("price_above_sma50", "true");
-    if (filters.price_above_5d_high) params.set("price_above_5d_high", "true");
-    if (filters.sma_bullish_crossover) params.set("sma_bullish_crossover", "true");
-    if (filters.rsi_min !== undefined && filters.rsi_min !== null)
-      params.set("rsi_min", filters.rsi_min);
-    if (filters.rsi_max !== undefined && filters.rsi_max !== null)
-      params.set("rsi_max", filters.rsi_max);
-    if (filters.rsi_bullish_divergence) params.set("rsi_bullish_divergence", "true");
-    if (filters.avg_volume_ratio_min !== undefined && filters.avg_volume_ratio_min !== null)
-      params.set("avg_volume_ratio_min", filters.avg_volume_ratio_min);
-    if (filters.min_score !== undefined && filters.min_score !== null)
-      params.set("min_score", filters.min_score);
+    if (Array.isArray(universeSymbols)) {
+      universeSymbols.forEach((symbol) => params.append("symbols", symbol));
+    }
     return params.toString();
   };
 
@@ -133,11 +120,19 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
   }, [hasUniverse]);
 
   const runScreener = async ({ preserveSelection = false } = {}) => {
+    setScreenerLoading(true);
+    setScreenerError("");
     try {
-      const query = buildQueryParams(criteria);
+      const query = buildQueryParams();
       const url = `http://127.0.0.1:8000/api/v1/screener/run${query ? `?${query}` : ""}`;
       const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Screener request failed (${res.status})`);
+      }
       const data = await res.json();
+      if (!Array.isArray(data)) {
+        throw new Error(data.detail || "Screener returned an invalid response");
+      }
       const filtered = filterUniverse(Array.isArray(data) ? data : []);
       setResults(attachUniverseMeta(filtered));
       if (!preserveSelection) {
@@ -148,15 +143,26 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
     } catch (err) {
       console.error("Screener error:", err);
       setResults([]);
+      setScreenerError(err.message || "Failed to load screener data");
+    } finally {
+      setScreenerLoading(false);
     }
   };
 
   const runBreakoutScan = async ({ preserveSelection = false } = {}) => {
+    setScreenerLoading(true);
+    setScreenerError("");
     try {
       const days = Math.max(1, Math.min(120, Number(breakoutLookbackDays) || 5));
       const url = `http://127.0.0.1:8000/api/v1/screener/breakouts?lookback_days=${days}`;
       const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Breakout scan failed (${res.status})`);
+      }
       const data = await res.json();
+      if (!Array.isArray(data)) {
+        throw new Error(data.detail || "Breakout scan returned an invalid response");
+      }
       const filtered = filterUniverse(Array.isArray(data) ? data : []);
 
       const currentSymbols = new Set(
@@ -186,17 +192,28 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
     } catch (err) {
       console.error("Breakout screener error:", err);
       setResults([]);
+      setScreenerError(err.message || "Failed to load breakout results");
+    } finally {
+      setScreenerLoading(false);
     }
   };
 
   const runHistoryScreener = async () => {
+    setScreenerLoading(true);
+    setScreenerError("");
     try {
-      const query = buildQueryParams(criteria);
+      const query = buildQueryParams();
       const url = `http://127.0.0.1:8000/api/v1/screener/history${
         query ? `?${query}` : ""
       }`;
       const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`History screener request failed (${res.status})`);
+      }
       const data = await res.json();
+      if (!Array.isArray(data)) {
+        throw new Error(data.detail || "History screener returned an invalid response");
+      }
       const filtered = filterUniverse(Array.isArray(data) ? data : []);
       setResults(attachUniverseMeta(filtered));
       setSelectedSymbol(null);
@@ -205,6 +222,9 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
     } catch (err) {
       console.error("History screener error:", err);
       setResults([]);
+      setScreenerError(err.message || "Failed to load history screener data");
+    } finally {
+      setScreenerLoading(false);
     }
   };
 
@@ -234,22 +254,6 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
   }, [universeSymbols, mode, breakoutEnabled, breakoutLookbackDays]);
 
   useEffect(() => {
-    if (mode !== "live" || breakoutEnabled) {
-      return;
-    }
-
-    runScreener({ preserveSelection: true });
-  }, [criteria, mode, breakoutEnabled]);
-
-  useEffect(() => {
-    if (mode !== "live" || !breakoutEnabled) {
-      return;
-    }
-
-    runBreakoutScan({ preserveSelection: true });
-  }, [mode, breakoutEnabled, breakoutLookbackDays]);
-
-  useEffect(() => {
     if (mode !== "live") {
       return undefined;
     }
@@ -271,7 +275,7 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
     }, intervalMs);
 
     return () => window.clearInterval(intervalId);
-  }, [mode, universeSymbols, criteria, breakoutEnabled, breakoutLookbackDays]);
+  }, [mode, universeSymbols, breakoutEnabled, breakoutLookbackDays]);
 
   const handleSelectSymbol = async (symbol) => {
     setSelectedSymbol(symbol);
@@ -545,24 +549,59 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
     : null;
 
   return (
-    <div style={{ display: "flex", height: "100vh", width: "100%" }}>
-      <ScreenerSidebar
-        mode={mode}
-        setMode={setMode}
-        breakoutEnabled={breakoutEnabled}
-        setBreakoutEnabled={setBreakoutEnabled}
-        breakoutLookbackDays={breakoutLookbackDays}
-        setBreakoutLookbackDays={setBreakoutLookbackDays}
-        criteria={criteria}
-        setCriteria={setCriteria}
-        runScreener={handleRun}
-      />
+    <div className="screener-layout">
+      <div className="screener-main">
+        {mode === "live" && (
+          <div className="market-scan-toolbar">
+            <label className="market-scan-toggle">
+              <input
+                type="checkbox"
+                checked={breakoutEnabled}
+                onChange={(event) => setBreakoutEnabled(event.target.checked)}
+              />
+              <span className="market-scan-toggle__text">
+                <strong>Breakout scan</strong>
+                <span>Find symbols trading above their recent high</span>
+              </span>
+            </label>
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, height: "100%", overflow: "hidden" }}>
-        <div style={{ flex: 1, overflow: "hidden", minHeight: 0, height: "100%", maxHeight: "100%" }}>
+            <label className="market-scan-lookback">
+              <span>High lookback</span>
+              <input
+                type="number"
+                min="1"
+                max="120"
+                value={breakoutLookbackDays}
+                onChange={(event) =>
+                  setBreakoutLookbackDays(
+                    Math.max(1, Math.min(120, Number(event.target.value) || 1))
+                  )
+                }
+              />
+              <span>days</span>
+            </label>
+
+            <button
+              className="market-scan-run"
+              type="button"
+              onClick={handleRun}
+              disabled={screenerLoading}
+            >
+              {screenerLoading
+                ? "Scanning..."
+                : breakoutEnabled
+                  ? "Scan breakouts"
+                  : "Refresh market"}
+            </button>
+          </div>
+        )}
+
+        <div className="screener-results-host">
           <ScreenerResults
             results={sortedResults}
             mode={mode}
+            loading={screenerLoading}
+            error={screenerError}
             pageTitle={pageTitle}
             liveStatusText={liveStatusText}
             liveStatusActive={mode === "live" && isLiveMarketOpen}
@@ -579,13 +618,14 @@ export default function Screener({ universeSymbols = null, universeMeta = {}, pa
       </div>
 
       <div
+        className="screener-market-panel"
         style={{
           width: "360px",
           padding: "20px",
           background: "#ffffff",
           borderLeft: "1px solid #e5e5e5",
           overflowY: "auto",
-          display: "flex",
+          display: mode === "live" ? "flex" : "none",
           flexDirection: "column",
         }}
       >
